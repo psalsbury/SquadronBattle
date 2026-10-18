@@ -1,0 +1,18 @@
+{
+  "name": "Squadron Battle",
+  "short_name": "Squadron",
+  "description": "A vertical-scrolling shoot-'em-up. Six stages over the planet Veyra, six bosses, four weapons, and captured pilots to rescue from the caves below. Drag anywhere to fly; your guns fire by themselves.",
+  "id": "/squadron-battle/",
+  "start_url": "/squadron-battle/",
+  "scope": "/squadron-battle/",
+  "display": "standalone",
+  "orientation": "portrait",
+  "background_color": "#070b1c",
+  "theme_color": "#070b1c",
+  "categories": ["games"],
+  "icons": [
+    { "src": "/squadron-battle/icon-192.png", "sizes": "192x192", "type": "image/png" },
+    { "src": "/squadron-battle/icon-512.png", "sizes": "512x512", "type": "image/png" },
+    { "src": "/squadron-battle/icon-maskable-512.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable" }
+  ]
+}

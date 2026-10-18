@@ -1,0 +1,218 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name="description" content="Squadron Battle: a vertical-scrolling shoot-'em-up. Fly six stages over the planet Veyra, dive through gates to rescue captured pilots, and take down the Kesh. Drag anywhere to fly; your guns fire by themselves.">
+<meta name="theme-color" content="#070b1c">
+<meta property="og:title" content="Squadron Battle">
+<meta property="og:description" content="Six stages, six bosses, four weapons and one squadron. Drag to fly, dive through the gates, bring the pilots home.">
+<meta property="og:image" content="https://salsbury.uk/squadron-battle/card.png?v=4">
+<title>Squadron Battle</title>
+<link rel="manifest" href="/squadron-battle/manifest.webmanifest">
+<link rel="icon" href="/squadron-battle/icon-192.png" type="image/png">
+<link rel="apple-touch-icon" href="/squadron-battle/apple-touch-icon.png">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="Squadron Battle">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Russo+One&family=Exo+2:wght@500;700;800&display=swap">
+<link rel="stylesheet" href="/assets/game-home.css?v=mobile-3">
+<style>
+:root{
+  --ink:#070b1c;--panel:#111a38;--panel-2:#18244a;--line:#26386e;--text:#eaf0ff;--muted:#9fb0d8;
+  --cyan:#39d5ff;--cyan-ink:#031722;--orange:#ff8a3d;--pink:#ff3d6e;
+  --font-display:"Russo One","Exo 2",system-ui,sans-serif;--font-body:"Exo 2",system-ui,-apple-system,"Segoe UI",sans-serif;
+  color-scheme:dark;
+  /* Home page theme (shared layout in /assets/game-home.css?v=mobile-3): cockpit cyan and afterburner orange on night sky */
+  --gh-bg:var(--ink);--gh-panel:var(--panel);--gh-line:var(--line);--gh-text:var(--text);--gh-muted:var(--muted);
+  --gh-accent:var(--cyan);--gh-accent-ink:var(--cyan-ink);--gh-accent-glow:rgba(57,213,255,.25);
+  --gh-logo-a:var(--cyan);--gh-logo-b:var(--orange);--gh-display:var(--font-display);--gh-display-weight:400;--gh-body:var(--font-body);--gh-logo-spacing:.01em;
+}
+*{box-sizing:border-box}
+[hidden]{display:none!important}
+html,body{height:100%}
+body{margin:0;background:var(--ink);color:var(--text);font-family:var(--font-body);font-size:16px;line-height:1.45;
+  background-image:radial-gradient(ellipse 70% 40% at 10% -5%,rgba(57,213,255,.10),transparent 70%),radial-gradient(ellipse 60% 40% at 100% 0%,rgba(255,138,61,.08),transparent 70%)}
+body[data-screen="game"]{overflow:hidden;background:#000;position:fixed;inset:0;min-height:0}
+button{font:inherit;color:inherit}
+:focus-visible{outline:2px solid var(--cyan);outline-offset:2px}
+.wrap{max-width:1040px;margin:0 auto;padding-inline:16px}
+.btn{display:inline-flex;align-items:center;justify-content:center;gap:6px;border-radius:999px;padding:10px 20px;font-weight:800;font-size:15px;cursor:pointer;
+  border:2px solid var(--line);background:var(--panel);color:var(--text);text-decoration:none;min-height:44px}
+.btn:hover{border-color:var(--muted)}
+.btn.primary{background:var(--cyan);border-color:var(--cyan);color:var(--cyan-ink)}
+.gh-logo .a{text-shadow:0 4px 0 #0b6f8f}
+.gh-logo .b{text-shadow:0 4px 0 #a2451a}
+#menuArt{width:100%;aspect-ratio:4/3;display:block;border-radius:20px;background:#2c5229;border:2px solid var(--line)}
+.section-title{font-family:var(--font-display);font-weight:400;font-size:26px;margin:8px 0 14px}
+.fine{color:var(--muted);font-size:14px;margin:6px 0 0}
+
+/* Pilot settings */
+.pilot{background:var(--panel);border:1px solid var(--line);border-radius:20px;padding:16px 18px;margin:0 0 30px;max-width:640px}
+.setrow{display:flex;align-items:center;justify-content:space-between;gap:12px;margin-top:10px;flex-wrap:wrap}
+.setrow > span{font-weight:800}
+.seg{display:inline-flex;background:var(--ink);border:1px solid var(--line);border-radius:999px;padding:3px;gap:2px}
+.seg button{border:0;background:none;border-radius:999px;padding:7px 14px;font-weight:700;font-size:14px;cursor:pointer;color:var(--muted);min-height:36px}
+.seg button[aria-checked="true"]{background:var(--cyan);color:var(--cyan-ink)}
+
+/* Stages */
+.stages{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,220px),1fr));gap:16px;padding-bottom:30px}
+.stage-card{display:flex;flex-direction:column;text-align:left;padding:0;border-radius:18px;overflow:hidden;border:2px solid var(--line);background:var(--panel);cursor:pointer;transition:transform .15s ease,border-color .15s ease}
+.stage-card:hover:not(:disabled){transform:translateY(-3px);border-color:var(--cyan)}
+.stage-card:disabled{cursor:not-allowed}
+.stage-card:disabled canvas{filter:saturate(.75) brightness(.62)}
+.stage-card{position:relative}
+.sc-lock{position:absolute;top:10px;right:10px;background:rgba(5,8,20,.75);border:1px solid var(--line);border-radius:999px;padding:3px 10px;font-size:12px;font-weight:800;color:var(--text)}
+.stage-card canvas{width:100%;aspect-ratio:320/150;display:block}
+.sc-body{display:flex;flex-direction:column;gap:3px;padding:12px 14px 14px;flex:1}
+.sc-n{font-size:12px;font-weight:800;letter-spacing:.12em;text-transform:uppercase;color:var(--orange)}
+.sc-name{font-family:var(--font-display);font-size:21px;line-height:1.1}
+.sc-blurb{color:var(--muted);font-size:14px}
+.sc-meta{margin-top:auto;padding-top:8px;font-weight:800;font-size:13px;color:var(--cyan)}
+
+/* Leaderboard dialog */
+.lb-tabs{display:flex;gap:4px;flex-wrap:wrap;margin:0 0 12px}
+.lb-tabs button{border:1px solid var(--line);background:var(--ink);border-radius:999px;padding:6px 12px;font-size:13px;font-weight:700;cursor:pointer;color:var(--muted)}
+.lb-tabs button[aria-selected="true"]{background:var(--cyan);border-color:var(--cyan);color:var(--cyan-ink)}
+.lb-list{list-style:none;margin:0;padding:0;display:flex;flex-direction:column;gap:6px}
+.lb-list li{display:grid;grid-template-columns:26px 30px minmax(0,1fr) auto;grid-template-rows:auto auto;column-gap:10px;align-items:center;background:var(--ink);border:1px solid var(--line);border-radius:12px;padding:7px 10px}
+.lb-list li.me{border-color:var(--cyan)}
+.lb-list .rk{grid-row:1/3;font-family:var(--font-display);font-size:17px;text-align:center;color:var(--muted)}
+.lb-list li:first-child .rk{color:#ffcc33}
+.lb-av{grid-row:1/3;width:30px;height:30px;border-radius:50%;background:var(--panel-2);display:grid;place-items:center;font-weight:800;color:var(--cyan);overflow:hidden}
+.lb-av img{width:100%;height:100%}
+.lb-nm{font-weight:800;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.lb-cl{grid-column:3;grid-row:2;font-size:12px;color:var(--muted)}
+.lb-st{grid-column:4;grid-row:1/3;font-family:var(--font-display);font-size:18px;color:var(--cyan);font-variant-numeric:tabular-nums}
+.pickups{list-style:none;padding:0}
+.pickups li{display:flex;align-items:flex-start;gap:4px;margin:0 0 8px}
+.pickups i{flex:none;width:18px;height:13px;border-radius:7px;margin-top:5px;border:1.5px solid #fff}
+.pickups i.round{width:15px;height:15px;border-radius:50%}
+.pickups i.gem{width:12px;height:12px;border-radius:2px;transform:rotate(45deg);margin:6px 3px 0}
+.pickups span{margin-left:6px}
+.lb-empty{display:block!important;color:var(--muted);background:none!important;border:0!important;padding:4px 0!important}
+
+/* Game */
+#game,#game *{-webkit-user-select:none;user-select:none;-webkit-touch-callout:none;-webkit-tap-highlight-color:transparent}
+#game{position:fixed;inset:0;background:#000;display:grid;place-items:center;touch-action:none;
+  padding:env(safe-area-inset-top) env(safe-area-inset-right) env(safe-area-inset-bottom) env(safe-area-inset-left)}
+#frame{position:relative;overflow:hidden}
+#cv{display:block;width:100%;height:100%;touch-action:none}
+.gbtn{position:absolute;border:2px solid rgba(255,255,255,.35);background:rgba(5,8,20,.45);color:#fff;border-radius:50%;display:grid;place-items:center;cursor:pointer;padding:0;touch-action:none}
+#pauseBtn{top:8px;right:8px;width:40px;height:40px;font-size:15px;border-radius:12px}
+#muteBtn{top:8px;right:54px;width:40px;height:40px;font-size:17px;border-radius:12px}
+#bombBtn{right:12px;bottom:14px;width:66px;height:66px;border-color:rgba(255,138,61,.8);background:radial-gradient(circle at 40% 35%,rgba(255,170,90,.55),rgba(160,40,10,.55));
+  font-family:var(--font-display);font-size:11px;line-height:1;display:flex;flex-direction:column;gap:2px;align-items:center;justify-content:center}
+#bombBtn b{font-size:20px}
+#bombBtn.empty{opacity:.4}
+#bombBtn:active{transform:scale(.94)}
+.over{position:absolute;left:50%;top:50%;transform:translate(-50%,-50%);width:min(330px,calc(100% - 24px));max-height:calc(100% - 24px);overflow:auto;background:rgba(10,15,36,.95);border:2px solid var(--line);border-radius:20px;
+  padding:18px 18px 16px;text-align:center;box-shadow:0 20px 50px rgba(0,0,0,.6);z-index:3;touch-action:auto}
+.over.win{border-color:var(--cyan)}
+.over.lose{border-color:var(--pink)}
+.over h2{font-family:var(--font-display);font-weight:400;font-size:28px;margin:0 0 6px;line-height:1.05}
+.over .kicker{font-size:12px;font-weight:800;letter-spacing:.14em;text-transform:uppercase;color:var(--orange);margin:0 0 4px}
+.over p{margin:6px 0 10px;color:var(--muted);font-size:15px}
+.over .big{font-family:var(--font-display);font-size:34px;color:#fff;margin:6px 0}
+.over .saved{font-size:13px}
+.over .fine{font-size:12px}
+.over .row{display:flex;gap:8px;justify-content:center;flex-wrap:wrap;margin-top:8px}
+.over .settings{text-align:left;margin:4px 0 8px}
+.over .setrow > span{font-size:14px}
+.over .seg button{padding:6px 10px;font-size:13px}
+.tally{width:100%;border-collapse:collapse;margin:8px 0;font-size:14px}
+.tally td{padding:5px 2px;border-bottom:1px solid var(--line);text-align:left;color:var(--muted)}
+.tally td:nth-child(2){color:var(--text);font-weight:700}
+.tally td:last-child{text-align:right;color:var(--cyan);font-weight:800}
+@media (prefers-reduced-motion:reduce){.stage-card{transition:none}}
+</style>
+</head>
+<body data-screen="menu">
+
+<section id="menu" class="wrap gh">
+  <header class="gh-top">
+    <a class="gh-back" href="/">← Salsbury.uk games</a>
+    <div class="gh-tools"><div class="gh-acct" id="acct"></div><button class="gh-icon" type="button" data-mute aria-label="Sound on">🔊</button></div>
+  </header>
+  <section class="gh-hero">
+    <div>
+      <h1 class="gh-logo"><span class="a">Squadron</span><span class="b">Battle</span></h1>
+      <p class="gh-lead">The Kesh have taken the planet Veyra and captured six of our pilots. Fly over fields, desert, ice, jungle and lava to their Citadel. Dive through the gates to the caves below to bring the pilots home. Drag anywhere to fly. Your guns fire by themselves.</p>
+      <div class="gh-actions">
+        <button class="gh-btn primary" id="playBtn" type="button" disabled><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M7 4.5v15l13-7.5z"/></svg>Play</button>
+        <button class="gh-btn" id="ghHowBtn" type="button"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M9.5 9.5a2.5 2.5 0 1 1 3.5 2.3c-.6.3-1 .9-1 1.6V14"/><path d="M12 17.5h.01"/></svg>How to play</button>
+        <button class="gh-btn" id="ghBoardBtn" type="button"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M8 4h8v5a4 4 0 0 1-8 0z"/><path d="M8 6H5a3 3 0 0 0 3 4M16 6h3a3 3 0 0 1-3 4"/><path d="M12 13v4M8 20h8M10 17h4"/></svg>Leaderboard</button>
+        <button class="gh-btn wide" id="installBtn" type="button" hidden><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 4v11M7 10l5 5 5-5"/><path d="M5 19h14"/></svg>Install app</button>
+      </div>
+      <p class="gh-note">6 stages, 6 bosses, 4 weapons. <span id="bestNote"></span></p>
+    </div>
+    <div class="gh-art"><canvas id="menuArt" role="img" aria-label="A fighter flying over farmland, with Kesh ships and a dive gate below"></canvas></div>
+  </section>
+  <div class="gh-ios" id="iosInstall" hidden><span>📲 Play it like an app: tap <b>Share</b> then <b>Add to Home Screen</b>.</span><button class="gh-icon" type="button" aria-label="Hide this tip">✕</button></div>
+  <h2 class="section-title">Pilot settings</h2>
+  <div class="pilot" id="pilotSettings"></div>
+  <h2 class="section-title">Stages</h2>
+  <div class="stages" id="stageCards"></div>
+  <footer class="gh-foot">&copy; 2026 Salsbury.uk</footer>
+
+  <div class="gh-modal" id="ghHow" hidden>
+    <div class="gh-sheet" role="dialog" aria-modal="true" aria-labelledby="ghHowT">
+      <div class="gh-sheet-head"><h2 id="ghHowT">How to play</h2><button class="gh-icon" type="button" data-close aria-label="Close">✕</button></div>
+      <h3>Flying</h3>
+      <ul><li><strong>Drag anywhere</strong> on the screen and the ship moves with your finger, so your finger never covers it. At <b>2×</b> it moves twice as far as your finger.</li>
+        <li><strong>Amiga speed</strong> gives the ship a top speed, like the original Amiga game. <strong>Keeps up</strong> keeps it with your finger.</li>
+        <li>Prefer a stick? Choose <strong>Joypad</strong>: touch anywhere and push your thumb the way you want to go.</li>
+        <li>Your guns <strong>fire by themselves</strong>. Tap <strong>SHOCK</strong> (bottom right) to set off a shock charge, which clears every bullet and hits everything on screen.</li>
+        <li>On a keyboard: arrows or <kbd>WASD</kbd> fly, <kbd>Space</kbd> sets off a charge, <kbd>P</kbd> pauses.</li></ul>
+      <h3>Weapons</h3>
+      <p>Shoot down the striped <strong>freighters</strong> to drop a weapon pod. Its colour changes every second and a half. Pick up the same colour as your gun to power it up (up to level 5), or a different colour to switch.</p>
+      <ul><li><strong style="color:#ffcc33">Scatter</strong>: a fan of shots that gets wider.</li>
+        <li><strong style="color:#39d5ff">Lance</strong>: fast needles that go through things.</li>
+        <li><strong style="color:#b98cff">Twin</strong>: shoots forwards and backwards, for Kesh that come up from behind.</li>
+        <li><strong style="color:#5cf08a">Arc</strong>: waves that curl out to the sides.</li></ul>
+      <h3>What to pick up</h3>
+      <p>Everything you can collect floats down with its name underneath, in its own colour:</p>
+      <ul class="pickups">
+        <li><i style="background:#ffcc33"></i><i style="background:#39d5ff"></i><i style="background:#b98cff"></i><i style="background:#5cf08a"></i><span><strong>Weapon pod</strong>: a capsule with a letter. Yellow S = Scatter, blue L = Lance, purple T = Twin, green A = Arc. <b>▲</b> next to the name means it will power up the gun you have.</span></li>
+        <li><i class="round" style="background:#e0201f"></i><span><strong style="color:#ff6a5a">Shock charge</strong>: a red disc with a lightning bolt.</span></li>
+        <li><i class="gem" style="background:#ffffff"></i><span><strong>Gem</strong>: a white diamond that drops when you shoot a green crystal cache. Each one is worth 1,000 points, which count towards your next extra ship.</span></li>
+        <li><i class="round" style="background:#eef3ff;box-shadow:0 0 0 3px rgba(92,240,138,.45)"></i><span><strong style="color:#5cf08a">Pilot</strong>: a white escape pod with a green glow, in the caves.</span></li>
+      </ul>
+      <h3>Shock charges</h3>
+      <p>You start with 3. Shoot down a whole squadron of five darters to win another.</p>
+      <h3>Dive gates and pilots</h3>
+      <p>Halfway through each stage a yellow-striped gate scrolls past on the ground. Fly over it to dive into the caves. Down there, break open the cage and pick up the captured pilot for a big bonus. Shoot the green crystal caches on the way: each drops a gem worth 1,000 points. At the end of each cave a guardian blocks the way back up: destroy its drill arms and nose gun, then its core, to return to the surface.</p>
+      <h3>Bosses</h3>
+      <p>Every stage ends with a Kesh boss. Its core is shielded until you've destroyed all the guns round it.</p>
+      <h3>Scoring</h3>
+      <p>Extra ships at 70,000, 200,000, 400,000, 650,000 and 1,000,000. Ace scores count one and a half times; Cadet scores count half. If you lose your last ship you can continue from the same stage, but your score goes back to 0.</p>
+    </div>
+  </div>
+  <div class="gh-modal" id="ghBoard" hidden>
+    <div class="gh-sheet" role="dialog" aria-modal="true" aria-labelledby="ghBoardT">
+      <div class="gh-sheet-head"><h2 id="ghBoardT">Leaderboard</h2><button class="gh-icon" type="button" data-close aria-label="Close">✕</button></div>
+      <div class="lb-tabs" id="lbTabs" role="tablist"></div>
+      <ol class="lb-list" id="lbList"><li class="lb-empty">Loading…</li></ol>
+      <div id="lbMe"></div>
+    </div>
+  </div>
+</section>
+
+<section id="game" hidden>
+  <div id="frame">
+    <canvas id="cv" role="img" aria-label="Squadron Battle. Drag anywhere to fly."></canvas>
+    <button class="gbtn" id="pauseBtn" type="button" aria-label="Pause">❚❚</button>
+    <button class="gbtn" id="muteBtn" type="button" data-mute aria-label="Sound on">🔊</button>
+    <button class="gbtn" id="bombBtn" type="button" aria-label="Shock charge"><b>3</b>SHOCK</button>
+    <div class="over" id="over" hidden></div>
+  </div>
+</section>
+
+<script src="/assets/auth.js?v=3"></script>
+<script src="/assets/game-home.js?v=2"></script>
+<script src="/assets/sfx.js?v=3"></script>
+<script src="game.js?v=15"></script>
+</body>
+</html>
