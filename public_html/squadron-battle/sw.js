@@ -1,8 +1,8 @@
 // Squadron Battle service worker: makes the game installable and playable offline.
 // Pages load from the network first (so updates show straight away) and fall back to the cache offline.
 // Scripts, icons and fonts come from the cache and refresh in the background. The API (leaderboard) is never cached.
-const CACHE = 'sq-v15';
-const PRECACHE = ['/squadron-battle/', 'game.js?v=15', '/assets/auth.js?v=3', '/assets/game-home.js?v=2', '/assets/game-home.css?v=1', '/assets/sfx.js?v=3', 'icon-192.png', 'manifest.webmanifest'];
+const CACHE = 'sq-v17';
+const PRECACHE = ['/squadron-battle/', 'game.js?v=17', '/assets/auth.js?v=3', '/assets/game-home.js?v=2', '/assets/game-home.css?v=1', '/assets/sfx.js?v=3', 'icon-192.png', 'manifest.webmanifest'];
 
 self.addEventListener('install', e => {
   e.waitUntil(caches.open(CACHE).then(c => c.addAll(PRECACHE)).then(() => self.skipWaiting()));
@@ -29,3 +29,4 @@ self.addEventListener('fetch', e => {
     return hit || fresh;
   }));
 });
+
