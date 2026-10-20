@@ -139,8 +139,7 @@ const buzz = ms => { try { navigator.vibrate && navigator.vibrate(ms); } catch {
 // synth-tom rolls into each section), a galloping octave bass and quiet chord arpeggios. The lead sits below the drums.
 // Four bars of intro, then 16 bars on a loop: the hook in A minor, then a 3-3-2 chorus that lands on E to pull back round.
 // It plays on the home page only, and only after the first tap or key press (browsers block sound before that).
-// The melody sits an octave below the written notes (Pete, 2026-10-20). Notes are timed on the audio clock, and the
-// echoes come from one shared delay line rather than extra notes, so it stays in time and light enough for phones.
+// The melody sits an octave below the written notes (Pete, 2026-10-20). The echoes come from one shared delay line.
 const midi = s => 12 * (+s.slice(-1) + 1) + { C: 0, D: 2, E: 4, F: 5, G: 7, A: 9, B: 11 }[s[0]] + (s[1] === '#' ? 1 : 0);
 const hz = m => 440 * 2 ** ((m - 69) / 12);
 const CHORDS = { Am: [45, 57, 60, 64], F: [41, 53, 57, 60], C: [36, 52, 55, 60], G: [43, 55, 59, 62], E: [40, 52, 56, 59] };
@@ -163,38 +162,60 @@ const SONG_LOOP = [
   return [ch, at];
 });
 const MIX_GAIN = .55; // the title music's level
+// The title music is worked out ahead of time into a recording and then played on a loop (Pete, 2026-10-20: it still
+// sounded distorted). Building ~30 notes a second live, each several audio nodes plus reverb, was more than a phone's
+// audio thread could keep up with, and when it fell behind the sound crackled. Now the same notes, echo and mix are
+// rendered once with OfflineAudioContexts, two bars at a time (one big render with every note in it gets slower with each
+// note), and the pieces added together with their echo and reverb tails overlapping. The 4-bar intro is done first and
+// starts straight away, repeating until the 16-bar loop is ready; the loop then comes in where an intro ends. Both have
+// their own tail wrapped round onto their start, so they repeat seamlessly.
+// Playing a recording costs the phone next to nothing.
 const music = (() => {
   const S = 60 / 136 / 4; // one sixteenth at 136 bpm
+  const SR = 32000; // plenty for a chiptune, and quicker to work out
+  const TAIL = 2; // seconds for the echo and reverb to ring out after a piece (the echo is down to about 2% by then)
+  const INTRO = SONG_INTRO.length * 16, LOOP = SONG_LOOP.length * 16; // in sixteenths
   const BASS = [0, null, 0, 12, null, 0, 12, null, 0, null, 0, 12, null, 7, 12, null]; // a galloping octave pattern
-  let timer = 0, next = 0, step = 0, echo = null, mixIn = null, mixCtx = null;
-  // The music's own mix, straight to the speakers rather than through the sound effects' compressor (which the music kept
-  // squeezing hard, and which a phone speaker then had to fight): the deep sub-bass a phone can't play is filtered out,
-  // it's a few dB quieter, and a soft limiter only catches the odd peak.
-  function mix() {
-    const gr = snd.graph(); if (!gr) return undefined;
-    if (mixCtx === gr.ctx) return mixIn;
-    const a = gr.ctx, hp = a.createBiquadFilter(), gain = a.createGain(), lim = a.createDynamicsCompressor();
-    hp.type = 'highpass'; hp.frequency.value = 80; hp.Q.value = .7;
-    gain.gain.value = MIX_GAIN;
-    lim.threshold.value = -6; lim.knee.value = 4; lim.ratio.value = 8; lim.attack.value = .005; lim.release.value = .2;
-    hp.connect(gain).connect(lim).connect(a.destination);
-    mixCtx = a; mixIn = hp; echo = null; window.__sqMusicLimiter = lim; // (the limiter is read by the sound tests)
-    return hp;
+  // A small synth like /assets/sfx.js's, but for whatever audio context the song is being worked out in.
+  // voice/hiss take the same options; `delay` is the time from the start of the recording.
+  let K = null, ECHO = null;
+  function kit(c, out) {
+    const noise = c.createBuffer(1, c.sampleRate, c.sampleRate), nd = noise.getChannelData(0);
+    for (let i = 0; i < nd.length; i++) nd[i] = Math.random() * 2 - 1;
+    const curves = {};
+    const shaper = k => {
+      if (!curves[k]) { const cv = new Float32Array(1024); for (let i = 0; i < 1024; i++) { const x = i / 512 - 1; cv[i] = (1 + k) * x / (1 + k * Math.abs(x)); } curves[k] = cv; }
+      const w = c.createWaveShaper(); w.curve = curves[k]; w.oversample = '2x'; return w;
+    };
+    const len = Math.floor(c.sampleRate * .9), ir = c.createBuffer(1, len, c.sampleRate), id = ir.getChannelData(0);
+    for (let i = 0; i < len; i++) id[i] = (Math.random() * 2 - 1) * (1 - i / len) ** 3;
+    const conv = c.createConvolver(), verb = c.createGain(); conv.buffer = ir; verb.gain.value = .2; verb.connect(conv).connect(out);
+    const finish = (g, o) => { g.connect(out); if (o.wet) { const w = c.createGain(); w.gain.value = o.wet; g.connect(w).connect(verb); } if (o.send) g.connect(o.send); };
+    function voice(type, f0, f1, dur, vol, o = {}) {
+      const t = o.delay || 0, osc = c.createOscillator(), g = c.createGain();
+      osc.type = type; osc.detune.value = o.detune || 0; osc.frequency.setValueAtTime(f0, t);
+      if (f1 !== f0) osc.frequency.exponentialRampToValueAtTime(Math.max(20, f1), t + (o.sweep || dur));
+      if (o.vib) { const l = c.createOscillator(), lg = c.createGain(); l.frequency.value = o.vib; lg.gain.value = o.vibDepth || 10; l.connect(lg).connect(osc.frequency); l.start(t); l.stop(t + dur + .05); }
+      const atk = o.attack || .005;
+      g.gain.value = 0; g.gain.setValueAtTime(.0001, t); g.gain.exponentialRampToValueAtTime(vol, t + atk);
+      if (o.hold) g.gain.setValueAtTime(vol, t + atk + o.hold);
+      g.gain.exponentialRampToValueAtTime(.0001, t + dur);
+      let node = osc;
+      if (o.lp) { const f = c.createBiquadFilter(); f.type = 'lowpass'; f.frequency.setValueAtTime(o.lp, t); if (o.lp1) f.frequency.exponentialRampToValueAtTime(o.lp1, t + dur); f.Q.value = o.q || .8; node.connect(f); node = f; }
+      if (o.drive) node = node.connect(shaper(o.drive));
+      node.connect(g); finish(g, o); osc.start(t); osc.stop(t + dur + .05);
+    }
+    function hiss(dur, vol, type, f0, f1, o = {}) {
+      const t = o.delay || 0, s = c.createBufferSource(), f = c.createBiquadFilter(), g = c.createGain();
+      s.buffer = noise; s.loop = true; f.type = type; f.Q.value = o.q || .9;
+      f.frequency.setValueAtTime(f0, t); if (f1 && f1 !== f0) f.frequency.exponentialRampToValueAtTime(f1, t + dur);
+      g.gain.value = 0; g.gain.setValueAtTime(.0001, t); g.gain.exponentialRampToValueAtTime(vol, t + (o.attack || .003)); g.gain.exponentialRampToValueAtTime(.0001, t + dur);
+      let node = s.connect(f); if (o.drive) node = node.connect(shaper(o.drive));
+      node.connect(g); finish(g, o); s.start(t, Math.random() * .5); s.stop(t + dur + .05);
+    }
+    return { voice, hiss };
   }
-  // Every music note goes into that mix.
-  const voice = (type, f0, f1, dur, vol, o = {}) => snd.voice(type, f0, f1, dur, vol, { ...o, dest: mix() });
-  const hiss = (dur, vol, type, f0, f1, o = {}) => snd.hiss(dur, vol, type, f0, f1, { ...o, dest: mix() });
-  // The lead's echo: a dotted-eighth delay feeding back on itself through a low-pass, so each repeat is about half as loud
-  // and a little darker (.5, .28, .15, ...). Built once per audio context; voices reach it through their `send`.
-  function echoIn() {
-    const gr = snd.graph(); if (!gr) return null;
-    if (echo && echo.ctx === gr.ctx) return echo.input;
-    const a = gr.ctx, input = a.createGain(), dl = a.createDelay(1), tone = a.createBiquadFilter(), fb = a.createGain();
-    input.gain.value = .5; dl.delayTime.value = 3 * S; tone.type = 'lowpass'; tone.frequency.value = 2200; fb.gain.value = .56;
-    input.connect(dl); dl.connect(tone); tone.connect(fb).connect(dl); tone.connect(mix());
-    echo = { ctx: a, input };
-    return input;
-  }
+  const voice = (...a) => K.voice(...a), hiss = (...a) => K.hiss(...a);
   // The drum kit
   const kick = d => { voice('sine', 190, 40, .3, .55, { delay: d, sweep: .08, drive: 1.4 }); hiss(.012, .18, 'highpass', 3000, 3000, { delay: d }); };
   const snare = (d, v = 1) => {
@@ -226,23 +247,77 @@ const music = (() => {
     if (BASS[s] !== null) { const f = hz(c[0] + BASS[s]); voice('sawtooth', f, f, S * 1.6, .1, { delay: d, lp: 1400, lp1: 300, q: 3 }); }
     // Arpeggio: up and down the chord, quietly
     { const f = hz([c[1], c[2], c[3], c[1] + 12, c[3], c[2]][s % 6] + 12); voice('square', f, f, S * .8, intro ? .012 + bar * .003 : .016, { delay: d, lp: 2600 }); }
-    // Lead: a plucky square with its three echoes, each a dotted eighth later, quieter and darker
+    // Lead: a plucky square (plus a quiet detuned saw), fed into the echo
     const ln = lead && lead[s];
     if (ln) {
-      const f = hz(ln[0]), dur = Math.min(ln[1], 4) * S * .9, o = { attack: .006, hold: dur * .3, vib: 5.5, vibDepth: f * .006, send: echoIn() };
+      const f = hz(ln[0]), dur = Math.min(ln[1], 4) * S * .9, o = { attack: .006, hold: dur * .3, vib: 5.5, vibDepth: f * .006, send: ECHO };
       voice('square', f, f, dur, .05, { ...o, delay: d, lp: 4200, lp1: 1800 });
       voice('sawtooth', f, f, dur, .018, { ...o, delay: d, detune: 8, lp: 3000 });
     }
   }
-  function tick() {
-    if (!snd || snd.muted) return;
-    const now = snd.now(); if (!now) return; // the audio clock: the same one every note's delay is measured from
-    if (next < now) next = now + .05; // after a stall, carry on from now rather than cram the missed notes in
-    while (next < now + .25) { note(step++, next - now); next += S; }
+  // Works out `steps` sixteenths of the song from `from` (plus TAIL) through the music's mix: sub-bass a phone can't
+  // play filtered out, MIX_GAIN, and the lead's echo (a dotted-eighth delay feeding back through a low-pass, so each repeat
+  // is about half as loud and a little darker). All of it is linear, so pieces can simply be added together.
+  function render(from, steps) {
+    const OAC = window.OfflineAudioContext || window.webkitOfflineAudioContext;
+    const c = new OAC(1, Math.ceil((steps * S + TAIL) * SR), SR);
+    const hp = c.createBiquadFilter(), gain = c.createGain();
+    hp.type = 'highpass'; hp.frequency.value = 80; hp.Q.value = .7; gain.gain.value = MIX_GAIN;
+    hp.connect(gain).connect(c.destination);
+    const input = c.createGain(), dl = c.createDelay(1), tone = c.createBiquadFilter(), fb = c.createGain();
+    input.gain.value = .5; dl.delayTime.value = 3 * S; tone.type = 'lowpass'; tone.frequency.value = 2200; fb.gain.value = .56;
+    input.connect(dl); dl.connect(tone); tone.connect(fb).connect(dl); tone.connect(hp);
+    K = kit(c, hp); ECHO = input;
+    for (let i = 0; i < steps; i++) note(from + i, i * S);
+    K = ECHO = null;
+    return c.startRendering();
+  }
+  // A stretch of the song, two bars per render, added up with the tails overlapping, and the tail that runs past the
+  // end folded back onto the start so it repeats seamlessly.
+  async function recording(from, steps) {
+    const per = SR * S, len = Math.round(steps * per), out = new Float32Array(len);
+    for (let k = 0; k < steps; k += 32) {
+      const d = (await render(from + k, Math.min(32, steps - k))).getChannelData(0), at = Math.round(k * per);
+      for (let i = 0; i < d.length; i++) out[(at + i) % len] += d[i];
+      await new Promise(r => setTimeout(r, 0)); // let the page draw between bars
+    }
+    const gr = snd.graph(); if (!gr) throw new Error('no audio');
+    const b = gr.ctx.createBuffer(1, out.length, SR); b.copyToChannel(out, 0);
+    return b;
+  }
+  let intro = null, loop = null, working = false, wanted = false, playing = null;
+  function prepare() {
+    if (working || (intro && loop)) return;
+    working = true;
+    recording(0, INTRO)
+      .then(b => { intro = b; play(); return recording(INTRO, LOOP); })
+      .then(b => { loop = b; working = false; queueLoop(); })
+      .catch(() => { working = false; });
+  }
+  function play() {
+    if (!wanted || playing || !intro || !snd || snd.muted) return;
+    const gr = snd.graph(); if (!gr) return;
+    const a = gr.ctx, out = a.createGain(), lim = a.createDynamicsCompressor(), src = a.createBufferSource(), t0 = a.currentTime + .05;
+    lim.threshold.value = -6; lim.knee.value = 4; lim.ratio.value = 8; lim.attack.value = .005; lim.release.value = .2; // only for the odd peak
+    out.connect(lim).connect(a.destination); src.buffer = intro; src.loop = true; src.connect(out); src.start(t0);
+    playing = { a, out, srcs: [src], intro: src, t0 };
+    queueLoop();
+  }
+  // The loop comes in at the end of the intro that's playing when it's ready (the intro repeats until then).
+  function queueLoop() {
+    const p = playing; if (!p || !loop || p.looped) return;
+    const a = p.a, src = a.createBufferSource(), L = intro.duration;
+    const at = p.t0 + Math.ceil((a.currentTime + .1 - p.t0) / L) * L;
+    src.buffer = loop; src.loop = true; src.connect(p.out); src.start(at); p.intro.stop(at);
+    p.srcs.push(src); p.looped = true;
   }
   return {
-    start() { if (timer || !snd || snd.muted) return; step = 0; next = 0; timer = setInterval(tick, 40); tick(); },
-    stop() { clearInterval(timer); timer = 0; },
+    start() { if (wanted || !snd || snd.muted) return; wanted = true; prepare(); play(); },
+    stop() {
+      wanted = false; const p = playing; playing = null; if (!p) return;
+      const t = p.a.currentTime; p.out.gain.setValueAtTime(1, t); p.out.gain.linearRampToValueAtTime(0, t + .15);
+      p.srcs.forEach(s => { try { s.stop(t + .2); } catch {} });
+    },
   };
 })();
 
