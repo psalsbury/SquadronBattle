@@ -7,7 +7,8 @@
 const W = 360, H = 640, CH = 320, TAU = Math.PI * 2, STEP = 1 / 60;
 const $ = id => document.getElementById(id);
 const clamp = (v, a, b) => v < a ? a : v > b ? b : v;
-const R = Math.random;
+let inSimulation = false, dailyRandom = null;
+const R = () => inSimulation && dailyRandom ? dailyRandom() : Math.random();
 const rr = (a, b) => a + R() * (b - a);
 function rng(seed) { let s = seed >>> 0; return () => { s = (s + 0x6D2B79F5) >>> 0; let t = s; t = Math.imul(t ^ (t >>> 15), t | 1); t ^= t + Math.imul(t ^ (t >>> 7), t | 61); return ((t ^ (t >>> 14)) >>> 0) / 4294967296; }; }
 const wave = (g, ph, a1, p1, a2, p2) => a1 * Math.sin(g / p1 + ph) + a2 * Math.sin(g / p2 + ph * 1.7);
@@ -650,7 +651,7 @@ const EK = {
       if (Math.floor(e.t * 3) % 2) circ(c, 0, -22, 2, '#ffcc33');
       c.restore(); } },
   gate: { hp: 0, r: 22, score: 0, air: false, nohit: true,
-    up(e, dt) { if (!G.trans && P.alive && P.inv < 2 && Math.hypot(P.x - e.x, P.y - e.y) < 22) startDive(e); },
+    up(e, dt) { if (!G.trans && P.alive && (e.lesson || P.inv < 2) && Math.hypot(P.x - e.x, P.y - e.y) < 22) startDive(e); },
     dr(c, e) { c.save(); c.translate(e.x, e.y); // a launch silo: hazard-striped collar, iris shutter, and guide lights chasing inwards
       const oct = r => { const p = []; for (let i = 0; i < 8; i++) { const a = (i + .5) / 8 * TAU; p.push(Math.cos(a) * r, Math.sin(a) * r); } return p; };
       c.save(); c.translate(3, 4); poly(c, oct(30), 'rgba(0,0,0,.4)'); c.restore();
@@ -722,7 +723,7 @@ const GROUND = [
 const pickW = (pool, r) => { const tot = pool.reduce((s, p) => s + p[1], 0); let x = r() * tot; for (const p of pool) if ((x -= p[1]) < 0) return p[0]; return pool[0][0]; };
 const STAGE_T = 92, GATE_T = 44;
 function buildTimeline(si) {
-  const r = rng(5000 + si * 7919), ev = [];
+  const r = rng((G.daily ? G.daily.seed : 5000) + si * 7919), ev = [];
   let t = 3;
   while (t < STAGE_T - 7) {
     let w = pickW(POOLS[si], r);
@@ -1125,7 +1126,7 @@ function damage(e, dmg) {
 }
 function collect(it) {
   if (it.k === 'cap') {
-    const ci = Math.floor((it.t / 1.5 + it.ci)) % 4;
+    const ci = podColour(it);
     if (ci === P.wt) { if (P.wl < 5) { P.wl++; G.txt.push({ x: P.x, y: P.y - 30, s: `${WEAPONS[ci].name} ${P.wl}`, t: 1.2, col: WEAPONS[ci].col, big: true }); } else addScore(2500, P.x, P.y - 30, true); }
     else { P.wt = ci; G.txt.push({ x: P.x, y: P.y - 30, s: `${WEAPONS[ci].name} ${P.wl}`, t: 1.2, col: WEAPONS[ci].col, big: true }); }
     sfx.power();
@@ -1364,15 +1365,15 @@ function drawItem(c, it) {
   const bob = Math.sin(it.t * 4) * 1.5, y = it.y + bob;
   let tag, tagCol;
   if (it.k === 'cap') {
-    const ci = Math.floor((it.t / 1.5 + it.ci)) % 4, wp = WEAPONS[ci];
+    const ci = podColour(it), wp = WEAPONS[ci];
     glow(c, it.x, it.y, 24, wp.col, .35 + .12 * Math.sin(it.t * 8));
     c.save(); c.translate(it.x, y);
     c.fillStyle = '#fff'; c.beginPath(); c.roundRect(-15.5, -11.5, 31, 23, 11.5); c.fill();
     c.fillStyle = wp.col; c.beginPath(); c.roundRect(-14, -10, 28, 20, 10); c.fill();
     c.fillStyle = 'rgba(255,255,255,.5)'; c.fillRect(-9, -8, 18, 3);
     c.fillStyle = wp.ink; c.font = `15px ${FONT}`; c.textAlign = 'center'; c.textBaseline = 'middle'; c.fillText(wp.l, 0, 1.5); c.restore();
-    const left = 1.5 - (it.t % 1.5); c.fillStyle = 'rgba(255,255,255,.75)'; c.fillRect(it.x - 12, y + 14, 24 * left / 1.5, 2);
-    tag = wp.name + (ci === P.wt ? (P.wl < 5 ? ' ▲' : ' MAX') : ''); tagCol = wp.col;
+    const left = it.lockedCi !== undefined ? 1.5 : 1.5 - (it.t % 1.5); c.save(); c.strokeStyle = wp.col; c.lineWidth = 2; c.beginPath(); c.arc(it.x,y,20,-Math.PI/2,-Math.PI/2+TAU*left/1.5); c.stroke(); c.restore();
+    tag = ci === P.wt ? (P.wl < 5 ? 'UPGRADE ' + wp.name + ' +' + 1 : wp.name + ' MAX') : 'SWITCH TO ' + wp.name; tagCol = wp.col;
   } else if (it.k === 'bomb') {
     glow(c, it.x, it.y, 20, '#ff3030', .35); circ(c, it.x, y, 12.5, '#fff'); circ(c, it.x, y, 11, '#e0201f'); circ(c, it.x, y, 7.5, '#ff6a5a');
     c.save(); c.translate(it.x, y); poly(c, [2, -9, -5, 1, -.5, 1, -2, 9, 5, -1.5, .5, -1.5], '#fff3a0'); c.restore();
@@ -1449,7 +1450,7 @@ function drawHUD(c) {
   text(c, String(G.score).padStart(7, '0'), 10, 18, 15, '#fff', 'left');
   text(c, 'HI ' + Math.max(save.best, G.score).toLocaleString(), 180, 18, 11, '#9fb0d8');
   for (let i = 0; i < Math.min(G.lives, 6); i++) drawShip(c, 16 + i * 15, 40, 0, .42, false);
-  if (G.practice) text(c, 'PRACTICE', 180, 34, 10, '#ffcc33');
+  if (G.practice) text(c, G.training ? 'FLIGHT SCHOOL' : G.daily ? 'DAILY SORTIE' : 'PRACTICE', 180, 34, 10, '#ffcc33');
   // Weapon
   const wp = WEAPONS[P.wt];
   c.fillStyle = 'rgba(5,8,20,.6)'; c.beginPath(); c.roundRect(8, H - 30, 118, 22, 11); c.fill();
@@ -1675,6 +1676,7 @@ function resume() { if (G.state !== 'paused') return; hideOver(); G.state = 'pla
 function stageCleared() {
   const si = G.si, bonusMiss = G.deathsStage === 0 ? 10000 : 0, kills = G.spawned ? Math.round(G.kills / G.spawned * 100) : 0, killBonus = kills * 100;
   addScore(bonusMiss + killBonus);
+  recordClear();
   G.state = 'clear';
   const last6 = si === STAGES.length - 1;
   if (si + 1 > save.reached && !last6) { save.reached = si + 1; store(); }
@@ -1811,12 +1813,262 @@ function shipGallery() {
   draw();
 }
 
+// ---------- Missions, flight school and personal achievements ----------
+// This block is embedded in game.js, before init(). Its simulation uses the
+// existing fixed-step loop; rendering never consumes the daily random stream.
+let dailyData = null, dailyLoading = false;
+save.records ||= {}; save.dailyBests ||= {}; save.radio ??= 'on';
+const RADIO = {
+  rescue: ['Pilot: "You took the scenic route."', 'Pilot: "Next time I am taking the bus."'],
+  formation: ['Command: "That was a very short formation flight."', 'Command: "Five down. Excellent paperwork."'],
+  emptyShock: ['Command: "An expensive way to frighten a cloud."'],
+  death: ['Command: "We needed that aircraft back."', 'Command: "A landing is usually slower."'],
+  core: ['Command: "Shield down. The glowing bit is the hint."'],
+  boss: ['Command: "That will not buff out."'],
+};
+function radio(kind, force = false) {
+  if (save.radio === 'off' || G.training || (!force && G.radio && G.radio.left > 0)) return;
+  const lines = RADIO[kind];
+  if (lines) G.radio = { text: lines[(G.radioCount = (G.radioCount || 0) + 1) % lines.length], left: 5 };
+}
+function podColour(it) { return it.lockedCi ?? Math.floor(it.t / 1.5 + it.ci) % 4; }
+function recordKey() { return G.diff + ':' + G.si; }
+function recordClear() {
+  if (G.training || G.daily) return;
+  const key = recordKey(), old = save.records[key] || {};
+  const earned = { rescue: G.rescued > 0, clean: G.deathsStage === 0, formation: G.formations > 0 };
+  const score = G.score - G.stageScore;
+  save.records[key] = {
+    rescue: !!(old.rescue || earned.rescue), clean: !!(old.clean || earned.clean), formation: !!(old.formation || earned.formation),
+    score: Math.max(old.score || 0, score), seconds: Math.min(old.seconds || Infinity, Math.round(G.stageActive)),
+    formations: Math.max(old.formations || 0, G.formations), clears: (old.clears || 0) + 1,
+  };
+  G.earned = earned; store();
+}
+function medalHtml(si, diff = save.diff) {
+  const r = save.records[diff + ':' + si] || {};
+  return [['rescue','Rescue','Rescue the captured pilot'],['clean','No losses','Clear without losing a ship'],['formation','Formation','Destroy a complete five-ship formation']]
+    .map(([key,label,hint]) => `<span class="medal ${r[key] ? 'earned' : ''}" title="${hint}">${r[key] ? '★' : '☆'} ${label}</span>`).join('');
+}
+function medalSummary() {
+  const r = save.records[recordKey()]; if (!r) return '';
+  const remaining = [!r.rescue && 'rescue the pilot', !r.clean && 'lose no ships', !r.formation && 'clear a whole formation'].filter(Boolean);
+  return `<div class="mission-records"><div class="medals">${medalHtml(G.si,G.diff)}</div><p class="fine">Best stage score: ${r.score.toLocaleString()} · Fastest clear: ${r.seconds}s</p><p class="fine">${remaining.length ? 'Next medals: ' + remaining.join('; ') + '.' : 'All three stage medals earned.'}</p></div>`;
+}
+
+// Six encounters that change tactics rather than only changing the scenery.
+const ENCOUNTERS = [
+  ['ANTI-AIR BATTERY','Silence the three guns before they fill the sky.'],
+  ['DESERT CONVOY','Intercept the moving armoured column.'],
+  ['FROST AMBUSH','Watch the charge glow. Cloaked hunters reveal before firing.'],
+  ['SPORE NESTS','Destroy the nests to stop the swarms.'],
+  ['RIFT VENTS','Glowing vents warn before each eruption.'],
+  ['SHIELD GENERATOR','Destroy the generator to remove the Citadel shield.'],
+];
+EK.frostHunter = { ...EK.cloaker,
+  up(e, dt) { const ph = e.t % 4; e.alpha = ph < 1.4 ? .12 : 1; e.y += 16 * dt; if (ph >= 2.3 && !e.fired) { e.fired=true; aimed(e.x,e.y,3,.24,130); } if(ph < .2)e.fired=false; },
+  hittable: e => e.alpha > .6,
+  dr(c,e) { EK.cloaker.dr(c,e); if(e.t%4 >= 1.4 && e.t%4 < 2.3){c.strokeStyle='#9ff3ff';c.lineWidth=2;c.beginPath();c.arc(e.x,e.y,19,0,TAU);c.stroke();} },
+};
+EK.nest = { hp: 22, r: 20, score: 1800, air: false, big: 1.5,
+  up(e,dt) { e.cool-=dt; if(e.cool<=0 && e.y>20 && e.y<340){e.cool=3.2;for(let i=0;i<3;i++)spawnEnemy('swarm',{x:e.x+(i-1)*12,y:e.y,vx:(i-1)*35,vy:100});} },
+  dr(c,e) { for(let i=0;i<6;i++){const a=i*TAU/6;circ(c,e.x+Math.cos(a)*12,e.y+Math.sin(a)*10,8,hitCol(e,'#7c477d'));}circ(c,e.x,e.y,12,hitCol(e,'#61c871'));circ(c,e.x,e.y,5,'#f7e884'); },
+};
+EK.vent = { hp: 12, r: 16, score: 1200, air:false,
+  up(e,dt) { e.cool-=dt;if(e.cool<=0&&e.y>20&&e.y<P.y-80){e.cool=3;for(let i=-1;i<=1;i++)shoot(e.x,e.y,Math.PI/2+i*.26,130,true);} },
+  dr(c,e) { ell(c,e.x,e.y,19,13,'#332329');ell(c,e.x,e.y,13,8,hitCol(e,e.cool<1?'#ffe072':'#d74925'));if(e.cool<1){c.strokeStyle='#ffc35a';c.lineWidth=2;c.beginPath();c.arc(e.x,e.y,22+Math.sin(e.t*9)*3,0,TAU);c.stroke();} },
+};
+EK.generator = { hp:32,r:22,score:3000,air:false,big:1.7,
+  up(e,dt) {e.y=Math.min(e.y,145);},
+  dr(c,e) {c.fillStyle=hitCol(e,'#4e477e');c.fillRect(e.x-19,e.y-18,38,36);circ(c,e.x,e.y,12,'#39d5ff');c.strokeStyle='#9ff3ff';c.lineWidth=2;c.beginPath();c.arc(e.x,e.y,27+Math.sin(e.t*4)*3,0,TAU);c.stroke();text(c,'SHIELD',e.x,e.y+35,10,'#9ff3ff');},
+};
+function encounter() {
+  const [name,tip]=ENCOUNTERS[G.si];G.encounterDone=true;G.encounterTitle={text:name,tip,left:5};
+  if(G.si===0)for(const x of [70,180,290])spawnEnemy('turret',{x,y:-25,cool:2.6});
+  if(G.si===1)for(let i=0;i<4;i++)spawnEnemy('tank',{x:60+i*65,y:-25-i*48,vx:i%2?32:-32,hp:11});
+  if(G.si===2)for(let i=0;i<3;i++)spawnEnemy('frostHunter',{x:65+i*115,y:40+i*35,alpha:.12,t:i*.7});
+  if(G.si===3)for(const x of [90,270])spawnEnemy('nest',{x,y:-20,cool:2.4});
+  if(G.si===4)for(const x of [70,290])spawnEnemy('vent',{x,y:-20,cool:2});
+  if(G.si===5)spawnEnemy('generator',{x:180,y:-25});
+}
+const originalCoreOpen=coreOpen;
+coreOpen=function(b){return !G.en.some(e=>e.k==='generator'&&!e.dead)&&originalCoreOpen(b);};
+const originalDamage=damage;
+damage=function(e,dmg){
+  if(e.k!=='generator'&&!EK[e.k].air&&G.en.some(q=>q.k==='generator'&&!q.dead)&&!G.training){burst(e.x,e.y,2,['#9ff3ff'],30,.15,1);return;}
+  const alive=!e.dead;originalDamage(e,dmg);
+  if(alive&&e.dead&&e.form&&G.form[e.form]?.left===0&&!G.form[e.form].broken){G.formations++;radio('formation');}
+  if(alive&&e.dead&&e.k==='generator')G.encounterTitle={text:'SHIELD DOWN',tip:'The Citadel is vulnerable.',left:3};
+};
+const originalDrawBoss=drawBoss;
+drawBoss=function(c){
+  originalDrawBoss(c);const b=G.boss;if(!b||b.dying||b.enter>0)return;
+  const open=coreOpen(b);
+  for(const p of b.parts){if(!p.alive)continue;
+    const charging=p.pats.some((pt,i)=>pt[1]>=.8&&p.cool?.[i]>0&&p.cool[i]<.65);
+    c.save();c.strokeStyle=p.core&&!open?'#9fb0d8':charging?'#ffb347':'#5cf08a';c.lineWidth=charging?3:1.5;
+    if(p.core&&!open)c.setLineDash([3,4]);c.beginPath();c.arc(b.x+p.dx,b.y+p.dy,p.r+5+(charging?Math.sin(G.now*16)*2:0),0,TAU);c.stroke();
+    if(charging)text(c,'CHARGING',b.x+p.dx,b.y+p.dy-p.r-12,8,'#ffd596');c.restore();
+  }
+};
+
+// The lesson waits for steering, a pickup, SHOCK and a dive gate in that order.
+const LESSONS = [
+  ['Move your ship','Drag anywhere, or use the arrow keys.'],
+  ['Collect the yellow weapon pod','Fly into it to upgrade your automatic guns.'],
+  ['Clear the bullets with SHOCK','Tap SHOCK, or press Space.'],
+  ['Enter the striped dive gate','Fly into the centre of the gate.'],
+];
+function lessonStep(step) {
+  G.training.step=step;G.training.time=0;G.en=[];G.eb=[];G.it=[];G.ps=[];
+  if(step===1)G.it.push({k:'cap',x:180,y:Math.min(440,P.y-50),t:0,r:12,ci:0,lockedCi:0,lesson:true});
+  if(step===2)for(let i=0;i<7;i++)G.eb.push({x:55+i*40,y:240,vx:0,vy:0,r:4});
+  if(step===3)spawnEnemy('gate',{x:180,y:Math.min(430,P.y-70),lesson:true});
+}
+function beginTraining(){play(0,true);G.training={step:0,time:0,startX:P.x,startY:P.y};G.tl=[];G.help=0;G.banner=null;P.inv=0;G.bombs=3;$('trainingSkip').hidden=false;lessonStep(0);}
+function completeTraining(skipped=false){
+  save.trainingDone=true;store();G.training=null;$('trainingSkip').hidden=true;G.state='clear';
+  showOver(`<h2>${skipped?'Ready to fly?':'Flight school complete'}</h2><p>${skipped?'You can replay flight school from the home page.':'You can steer, upgrade, use SHOCK and dive to rescue pilots.'}</p><div class="row"><button class="btn" id="lessonHome">Home</button><button class="btn primary" id="lessonPlay">Start campaign</button></div>`,'win');
+  $('lessonHome').onclick=quitToMenu;$('lessonPlay').onclick=()=>play(0,false);
+}
+const originalCollect=collect;
+collect=function(it){originalCollect(it);if(it.k==='pod')radio('rescue');if(G.training?.step===1&&it.k==='cap')lessonStep(2);};
+const originalBomb=useBomb;
+useBomb=function(){
+  const before=G.bombs,empty=G.eb.length===0&&!G.en.some(e=>!EK[e.k].nohit&&e.y>0&&e.y<H)&&!G.boss;
+  originalBomb();if(G.bombs<before){if(empty)radio('emptyShock');if(G.training?.step===2)lessonStep(3);}
+};
+const originalDie=die;
+die=function(){if(G.training)return;const was=P.alive;originalDie();if(was&&!P.alive)radio('death');};
+const originalDive=startDive;
+startDive=function(gate){if(G.training){if(G.training.step===3)completeTraining();return;}originalDive(gate);};
+
+// Daily sorties have their own server-issued configuration and score table.
+function dailyTimeline(cfg){
+  const r=rng(cfg.seed),ev=[];
+  if(cfg.type==='boss'){ev.push({t:3,w:'boss'});return ev;}
+  for(let t=2;t<119;t+=3.5){ev.push({t,w:pickW(POOLS[cfg.stage],r),x:60+r()*240,side:r()<.5?-1:1});}
+  for(let t=7;t<115;t+=12)ev.push({t,w:'freighter',side:r()<.5?-1:1});
+  for(let t=5;t<115;t+=7)ev.push({t,w:'darters',side:r()<.5?-1:1});
+  return ev.sort((a,b)=>a.t-b.t);
+}
+async function loadDaily(){
+  if(dailyLoading)return;dailyLoading=true;
+  try{dailyData=await SUK.api('sq_daily');}catch{dailyData=null;}finally{dailyLoading=false;renderDaily();}
+}
+function renderDaily(){
+  const el=$('dailyMission');if(!el)return;
+  if(!dailyData){el.innerHTML='<h2>Daily sortie</h2><p class="fine">Connect to load today’s two-minute mission.</p><div class="row"><button class="btn" id="dailyRetry">Retry connection</button><button class="btn" id="flightSchool">Flight school</button></div>';$('dailyRetry').onclick=loadDaily;$('flightSchool').onclick=beginTraining;return;}
+  const c=dailyData.mission,best=save.dailyBests[c.day]||0;
+  el.innerHTML=`<div class="mission-head"><div><p class="fine">DAILY SORTIE · ${esc(c.day)}</p><h2>${esc(c.title)}</h2></div><span class="mission-time">2 MIN</span></div><p>${esc(c.description)}</p><p class="fine">${esc(STAGES[c.stage].name)} · Pilot difficulty · ${WEAPONS[c.weapon].name} level 3 · Same flight plan for everyone.</p><div class="row"><button class="btn primary" id="dailyPlay">${best?'Fly again':'Fly today’s sortie'}</button><button class="btn" id="flightSchool">Flight school</button></div><p class="fine">${best?'Your best on this device: '+best.toLocaleString()+'. ':''}Resets at midnight UK time. ${me?'Your best submitted score ranks below.':'Sign in before flying to join the daily leaderboard.'}</p><ol class="daily-board">${dailyData.rows.length?dailyData.rows.map((r,i)=>`<li><span>${i+1}. ${esc(SUK.firstName(r.name))}</span><b>${r.score.toLocaleString()}</b></li>`).join(''):'<li>No scores yet. Take the first sortie.</li>'}</ol>${dailyData.mine?`<p class="fine">Your daily rank: ${dailyData.mine.rank} · Best: ${dailyData.mine.score.toLocaleString()}</p>`:''}<p class="fine" id="dailyStatus" role="status"></p>`;
+  $('dailyPlay').onclick=beginDaily;$('flightSchool').onclick=beginTraining;
+}
+async function beginDaily(){
+  const btn=$('dailyPlay');if(btn)btn.disabled=true;
+  try{
+    const result=await SUK.api('sq_daily_start',{}),cfg=result.mission;
+    const reached=save.reached;
+    snd&&snd.unlock();primeExplosions();music.stop();showGame();newRun(cfg.stage,true);save.reached=reached;store();
+    G.daily={...cfg,token:result.token,active:0,bosses:0,finished:false};G.training=null;
+    dailyRandom=rng(cfg.seed);inSimulation=true;
+    try{G.diff=1;P.wt=cfg.weapon;P.wl=3;startStage(cfg.stage);G.tl=dailyTimeline(cfg);G.help=0;G.banner={text:'DAILY SORTIE',sub:cfg.title,t:2.4};
+      if(cfg.type==='rescue')dailyCave();
+    }finally{inSimulation=false;}
+  }catch(e){const el=$('dailyStatus');if(el)el.textContent=e.message||'The mission could not start. Try again.';}finally{if(btn)btn.disabled=false;}
+}
+function dailyCave(){
+  G.mode='cave';G.cd=0;G.ct=0;G.cspeed=54;G.ctl=buildCave(G.si);G.cti=0;G.en=[];G.eb=[];G.ps=[];G.it=[];G.boss=null;
+  P.x=P.tx=180;P.y=P.ty=560;P.inv=2;
+}
+const originalSurface=startSurface;
+startSurface=function(){if(G.daily?.type==='rescue'){G.daily.bosses++;dailyCave();return;}originalSurface();};
+async function finishDaily(survived){
+  const d=G.daily;if(!d||d.finished)return;d.finished=true;G.state='clear';
+  save.dailyBests[d.day]=Math.max(save.dailyBests[d.day]||0,G.score);store();
+  showOver(`<p class="kicker">Daily sortie · ${esc(d.day)}</p><h2>${survived?'Sortie complete':'Sortie ended'}</h2><p class="big">${G.score.toLocaleString()}</p><p>${Math.floor(d.active)} / 120 seconds · ${G.rescuedRun} pilots rescued · ${d.bosses} bosses defeated</p><p id="dailySaved" class="fine" role="status">${d.token?'Saving your daily score…':'Saved on this device. Sign in before the next flight to join the daily leaderboard.'}</p><div class="row"><button class="btn" id="dailyHome">Home</button><button class="btn primary" id="dailyAgain">Fly again</button></div>`,'win');
+  $('dailyHome').onclick=quitToMenu;$('dailyAgain').onclick=beginDaily;
+  if(d.token){try{const result=await SUK.api('sq_daily_submit',{token:d.token,score:G.score,secs:Math.min(120,Math.floor(d.active)),rescued:G.rescuedRun,bosses:d.bosses});const el=$('dailySaved');if(el)el.textContent='Daily best saved. Your rank: '+result.rank+'.';}catch(e){const el=$('dailySaved');if(el)el.textContent=e.message||'Score could not be saved.';}}
+  loadDaily();
+}
+
+const originalNewRun=newRun;
+newRun=function(si,practice){G.daily=null;G.training=null;dailyRandom=null;$('trainingSkip').hidden=true;originalNewRun(si,practice);};
+const originalStartStage=startStage;
+startStage=function(si){
+  const reached=save.reached;originalStartStage(si);
+  if(G.daily||G.training){save.reached=reached;store();}
+  G.formations=0;G.stageActive=0;G.encounterDone=false;G.encounterTitle=null;G.earned=null;G.radio=null;G.radioCount=0;
+};
+const originalUpdate=update;
+update=function(dt){
+  inSimulation=!!G.daily;
+  try{
+    if(G.daily&&!G.daily.finished){G.daily.active=Math.min(120,G.daily.active+dt);if(G.daily.active>=120){finishDaily(true);return;}}
+    G.stageActive=(G.stageActive||0)+dt;
+    if(G.radio)G.radio.left=Math.max(0,G.radio.left-dt);
+    if(G.encounterTitle)G.encounterTitle.left-=dt;
+    if(G.training){
+      const tr=G.training;tr.time+=dt;P.inv=0;G.tl=[];
+      if(tr.step===0&&Math.hypot(P.x-tr.startX,P.y-tr.startY)>25)lessonStep(1);
+      if(tr.step===1){for(const it of G.it)if(it.lesson)it.y=Math.min(it.y,500);}
+      if(tr.step===3)for(const e of G.en)if(e.lesson)e.y=Math.min(e.y,480);
+    }
+    for(const it of G.it)if(it.k==='cap'&&!it.lesson){if(Math.hypot(it.x-P.x,it.y-P.y)<58){it.lockedCi??=podColour(it);}else delete it.lockedCi;}
+    if(!G.daily&&!G.training&&G.mode==='surf'&&!G.encounterDone&&G.t>=24)encounter();
+    originalUpdate(dt);
+    const b=G.boss;if(b&&b.enter<=0&&!b.dying&&coreOpen(b)&&!b.openAnnounced){b.openAnnounced=true;radio('core',true);}
+    if(G.daily?.type==='rescue'&&G.clearT>0)G.clearT=0;
+  }finally{inSimulation=false;}
+};
+const originalStageCleared=stageCleared;
+stageCleared=function(){
+  if(G.daily){G.daily.bosses++;G.clearT=0;G.boss=null;spawnBoss(BOSSES[(G.si+G.daily.bosses)%6]);return;}
+  originalStageCleared();
+  if(G.si!==STAGES.length-1)over.insertAdjacentHTML('beforeend',medalSummary());
+};
+const originalHitBossPart=hitBossPart;
+hitBossPart=function(b,p,dmg){const dying=b.dying;const hit=originalHitBossPart(b,p,dmg);if(!dying&&b.dying)radio('boss',true);return hit;};
+const originalFinishRun=finishRun;
+finishRun=async function(won){
+  if(G.daily)return finishDaily(false);
+  if(G.training)return completeTraining(true);
+  const pending=originalFinishRun(won);if(won)over.insertAdjacentHTML('beforeend',medalSummary());return pending;
+};
+const originalQuit=quitToMenu;
+quitToMenu=function(){G.training=null;G.daily=null;dailyRandom=null;$('trainingSkip').hidden=true;originalQuit();loadDaily();};
+const originalControlsHtml=controlsHtml;
+controlsHtml=function(){return originalControlsHtml()+`<div class="setrow"><span>Radio chatter</span><div class="seg" role="radiogroup" data-set="radio">${[['on','On'],['off','Off']].map(([v,label])=>`<button type="button" role="radio" aria-checked="${save.radio===v}" data-v="${v}">${label}</button>`).join('')}</div></div>`;};
+const originalRenderMenu=renderMenu;
+renderMenu=function(){
+  originalRenderMenu();renderDaily();
+  $('stageCards').querySelectorAll('.stage-card').forEach((b,i)=>{
+    b.querySelector('.sc-body').insertAdjacentHTML('beforeend',`<span class="medals">${medalHtml(i)}</span>`);
+    const r=save.records[save.diff+':'+i];if(r)b.querySelector('.sc-body').insertAdjacentHTML('beforeend',`<span class="fine">Best ${r.score.toLocaleString()} · ${r.seconds}s fastest</span>`);
+  });
+};
+function featureHUD(c){
+  if(G.daily){text(c,Math.max(0,120-Math.floor(G.daily.active))+'s · '+G.daily.title,180,82,11,'#ffcc33');}
+  if(G.training){const lesson=LESSONS[G.training.step];c.fillStyle='rgba(5,8,20,.86)';c.fillRect(14,82,332,58);text(c,lesson[0],180,100,12,'#ffcc33');text(c,lesson[1],180,121,10,'#eaf0ff');}
+  if(G.encounterTitle?.left>0){text(c,G.encounterTitle.text,180,88,13,'#ffcc33');const words=G.encounterTitle.tip.split(' ');let line='',y=108;for(const w of words){if((line+w).length>43){text(c,line.trim(),180,y,9,'#fff');y+=14;line='';}line+=w+' ';}text(c,line.trim(),180,y,9,'#fff');}
+  if(G.radio?.left>0&&save.radio!=='off'&&!G.training){
+    const ry=P.y>H/2?(G.boss||G.daily?94:74):H-105;c.fillStyle='rgba(5,8,20,.82)';c.beginPath();c.roundRect(10,ry,340,40,8);c.fill();
+    const words=G.radio.text.split(' ');let lines=[''];for(const word of words){const i=lines.length-1;if((lines[i]+word).length>43)lines.push(word+' ');else lines[i]+=word+' ';}lines.slice(0,2).forEach((s,i)=>text(c,s.trim(),180,ry+12+i*15,10,'#e1f4ff'));
+  }
+  if(G.boss&&!G.boss.dying&&G.boss.enter<=0)text(c,coreOpen(G.boss)?'CORE EXPOSED':'DESTROY THE GREEN-RINGED GUNS',180,77,9,coreOpen(G.boss)?'#5cf08a':'#eaf0ff');
+}
+const originalDrawHUD=drawHUD;
+drawHUD=function(c){originalDrawHUD(c);featureHUD(c);};
+// Keep the original hook useful for deterministic automated play-throughs.
+function featureTestHook(){return {beginTraining,lessonStep,completeTraining,beginDaily,finishDaily,encounter,collect,damage,recordClear,podColour,coreOpen,spawnBoss,stageCleared,gameOver,finishRun,drawItem,drawBoss,dailyTimeline,loadDaily,getDaily:()=>dailyData,radio};}
+
 // ---------- Start up ----------
 async function init() {
   if (snd) snd.bindMute(document.querySelectorAll('[data-mute]'), () => { syncMusic(); if (!menu.hidden) renderMenu(); });
   GH.install({ btn: 'installBtn', tip: 'iosInstall', tipKey: 'squadron-ios-tip', sw: '/squadron-battle/sw.js', scope: '/squadron-battle/' });
   GH.backNav({ depth: () => gameEl.hidden ? 0 : 1, back: () => { if (G.state === 'play') pause(); else quitToMenu(); } });
-  $('playBtn').onclick = () => play(0, false);
+  $('playBtn').onclick = () => save.trainingDone ? play(0,false) : beginTraining();
+  $('trainingSkip').onclick = () => completeTraining(true);
+  loadDaily();
   $('ghHowBtn').onclick = () => GH.open('ghHow');
   $('ghBoardBtn').onclick = () => { GH.open('ghBoard'); loadBoard(); };
   renderMenu();
@@ -1829,9 +2081,11 @@ async function init() {
   const b = await loadBoard();
   GH.account($('acct'), { user: me, clientId, why: 'Sign in with Google to put your scores on the Squadron Battle leaderboard.' });
   if (!b) GH.account($('acct'), {});
+  renderDaily();
 }
 init();
 
 // Test hook (used by the automated play-through).
-window.__sq = { G, P, save, play, update, render, useBomb, startStage, BOSSES, STAGES, EK, quitToMenu, pause, resume, setInv(v) { P.inv = v; } };
+window.__sq = { G, P, save, play, update, render, useBomb, startStage, BOSSES, STAGES, EK, quitToMenu, pause, resume, features: featureTestHook(), setInv(v) { P.inv = v; } };
 })();
+
