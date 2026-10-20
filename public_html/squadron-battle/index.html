@@ -127,6 +127,11 @@ button{font:inherit;color:inherit}
 .tally td:nth-child(2){color:var(--text);font-weight:700}
 .tally td:last-child{text-align:right;color:var(--cyan);font-weight:800}
 @media (prefers-reduced-motion:reduce){.stage-card{transition:none}}
+.daily-sortie{margin:0 0 26px;padding:18px;border:2px solid var(--cyan);border-radius:18px;background:var(--panel)}
+.daily-sortie h2{margin:4px 0;font-family:var(--font-display);font-weight:400;font-size:24px}
+.mission-head{display:flex;justify-content:space-between;align-items:center;gap:12px}.mission-time{color:var(--cyan);white-space:nowrap;font-weight:800}
+.daily-sortie .row{display:flex;gap:10px;flex-wrap:wrap}.daily-board{padding:0;list-style:none}.daily-board li{display:flex;justify-content:space-between;gap:12px;padding:6px;border-bottom:1px solid var(--line)}
+.daily-board span{overflow-wrap:anywhere}.medals{display:flex;gap:5px;flex-wrap:wrap;margin-top:9px}.medal{font-size:11px;border:1px solid var(--line);border-radius:8px;padding:3px 6px;color:var(--muted)}.medal.earned{color:#ffda75;border-color:#a78a43;background:#392f1c}.mission-records{margin-top:12px}.training-skip{position:absolute;z-index:5;top:48px;right:10px;border:1px solid var(--line);border-radius:16px;background:var(--panel);padding:8px;color:var(--text);min-height:36px}
 </style>
 </head>
 <body data-screen="menu">
@@ -151,6 +156,7 @@ button{font:inherit;color:inherit}
     <div class="gh-art"><canvas id="menuArt" role="img" aria-label="A fighter flying over farmland, with Kesh ships and a dive gate below"></canvas></div>
   </section>
   <div class="gh-ios" id="iosInstall" hidden><span>📲 Play it like an app: tap <b>Share</b> then <b>Add to Home Screen</b>.</span><button class="gh-icon" type="button" aria-label="Hide this tip">✕</button></div>
+  <section id="dailyMission" class="daily-sortie" aria-label="Daily sortie"></section>
   <h2 class="section-title">Pilot settings</h2>
   <div class="pilot" id="pilotSettings"></div>
   <h2 class="section-title">Stages</h2>
@@ -166,8 +172,8 @@ button{font:inherit;color:inherit}
         <li>Prefer a stick? Choose <strong>Joypad</strong>: touch anywhere and push your thumb the way you want to go.</li>
         <li>Your guns <strong>fire by themselves</strong>. Tap <strong>SHOCK</strong> (bottom right) to set off a shock charge, which clears every bullet and hits everything on screen.</li>
         <li>On a keyboard: arrows or <kbd>WASD</kbd> fly, <kbd>Space</kbd> sets off a charge, <kbd>P</kbd> pauses.</li></ul>
-      <h3>Weapons</h3>
-      <p>Shoot down the striped <strong>freighters</strong> to drop a weapon pod. Its colour changes every second and a half. Pick up the same colour as your gun to power it up (up to level 5), or a different colour to switch.</p>
+      <h3>Daily sorties and medals</h3><p>A new two-minute survival, rescue or boss mission appears at midnight UK time. Everyone starts at Pilot difficulty with the same weapon and flight plan. Daily scores have their own leaderboard. Campaign and practice stage medals reward rescuing the pilot, losing no ships and destroying a complete formation; records are saved on this device separately for each difficulty.</p><h3>Weapons</h3>
+      <p>Shoot down the striped <strong>freighters</strong> to drop a weapon pod. Its colour changes every second and a half. The countdown ring shows the next colour change; the colour locks as you approach. Pick up the same colour as your gun to power it up (up to level 5), or a different colour to switch.</p>
       <ul><li><strong style="color:#ffcc33">Scatter</strong>: a fan of shots that gets wider.</li>
         <li><strong style="color:#39d5ff">Lance</strong>: fast needles that go through things.</li>
         <li><strong style="color:#b98cff">Twin</strong>: shoots forwards and backwards, for Kesh that come up from behind.</li>
@@ -203,6 +209,7 @@ button{font:inherit;color:inherit}
 <section id="game" hidden>
   <div id="frame">
     <canvas id="cv" role="img" aria-label="Squadron Battle. Drag anywhere to fly."></canvas>
+    <button id="trainingSkip" class="training-skip" type="button" hidden>Skip lesson</button>
     <button class="gbtn" id="pauseBtn" type="button" aria-label="Pause">❚❚</button>
     <button class="gbtn" id="muteBtn" type="button" data-mute aria-label="Sound on">🔊</button>
     <button class="gbtn" id="bombBtn" type="button" aria-label="Shock charge"><b>3</b>SHOCK</button>
@@ -213,6 +220,7 @@ button{font:inherit;color:inherit}
 <script src="/assets/auth.js?v=3"></script>
 <script src="/assets/game-home.js?v=2"></script>
 <script src="/assets/sfx.js?v=3"></script>
-<script src="game.js?v=15"></script>
+<script src="game.js?v=17"></script>
 </body>
 </html>
+
