@@ -133,6 +133,8 @@ const buzz = ms => { try { navigator.vibrate && navigator.vibrate(ms); } catch {
 // synth-tom rolls into each section), a galloping octave bass and quiet chord arpeggios. The lead sits below the drums.
 // Four bars of intro, then 16 bars on a loop: the hook in A minor, then a 3-3-2 chorus that lands on E to pull back round.
 // It plays on the home page only, and only after the first tap or key press (browsers block sound before that).
+// The melody sits an octave below the written notes (Pete, 2026-10-20). Notes are timed on the audio clock, and the
+// echoes come from one shared delay line rather than extra notes, so it stays in time and light enough for phones.
 const midi = s => 12 * (+s.slice(-1) + 1) + { C: 0, D: 2, E: 4, F: 5, G: 7, A: 9, B: 11 }[s[0]] + (s[1] === '#' ? 1 : 0);
 const hz = m => 440 * 2 ** ((m - 69) / 12);
 const CHORDS = { Am: [45, 57, 60, 64], F: [41, 53, 57, 60], C: [36, 52, 55, 60], G: [43, 55, 59, 62], E: [40, 52, 56, 59] };
@@ -149,16 +151,26 @@ const SONG_LOOP = [
   ['Am', 'E6:3 C6:3 A5:2 E6:3 C6:3 A5:2'], ['Am', 'E6:2 D6:2 C6:2 B5:2 A5:8'],
   ['F', 'C6:3 A5:3 F5:2 C6:3 A5:3 F5:2'], ['G', 'D6:3 B5:3 G5:2 D6:3 B5:3 G5:2'],
   ['E', 'G#5:3 B5:3 E6:2 G#5:3 B5:3 E6:2'], ['E', 'E6:4 D6:2 B5:2 G#5:4 .:4'],
-].map(([ch, lead]) => { // lead -> { step: [midi note, length] }
+].map(([ch, lead]) => { // lead -> { step: [midi note, length] }, played an octave lower than written
   const at = {}; let p = 0;
-  for (const tk of lead.split(' ')) { const [n, l] = tk.split(':'); if (n !== '.') at[p] = [midi(n), +l]; p += +l; }
+  for (const tk of lead.split(' ')) { const [n, l] = tk.split(':'); if (n !== '.') at[p] = [midi(n) - 12, +l]; p += +l; }
   return [ch, at];
 });
 const music = (() => {
   const S = 60 / 136 / 4; // one sixteenth at 136 bpm
   const BASS = [0, null, 0, 12, null, 0, 12, null, 0, null, 0, 12, null, 7, 12, null]; // a galloping octave pattern
-  let timer = 0, next = 0, step = 0;
-  const clock = () => performance.now() / 1000;
+  let timer = 0, next = 0, step = 0, echo = null;
+  // The lead's echo: a dotted-eighth delay feeding back on itself through a low-pass, so each repeat is about half as loud
+  // and a little darker (.5, .28, .15, ...). Built once per audio context; voices reach it through their `send`.
+  function echoIn() {
+    const gr = snd.graph(); if (!gr) return null;
+    if (echo && echo.ctx === gr.ctx) return echo.input;
+    const a = gr.ctx, input = a.createGain(), dl = a.createDelay(1), tone = a.createBiquadFilter(), fb = a.createGain();
+    input.gain.value = .5; dl.delayTime.value = 3 * S; tone.type = 'lowpass'; tone.frequency.value = 2200; fb.gain.value = .56;
+    input.connect(dl); dl.connect(tone); tone.connect(fb).connect(dl); tone.connect(gr.bus);
+    echo = { ctx: a, input };
+    return input;
+  }
   // The drum kit
   const kick = d => { snd.voice('sine', 190, 40, .3, .55, { delay: d, sweep: .08, drive: 1.4 }); snd.hiss(.012, .18, 'highpass', 3000, 3000, { delay: d }); };
   const snare = (d, v = 1) => {
@@ -193,20 +205,19 @@ const music = (() => {
     // Lead: a plucky square with its three echoes, each a dotted eighth later, quieter and darker
     const ln = lead && lead[s];
     if (ln) {
-      const f = hz(ln[0]), dur = Math.min(ln[1], 4) * S * .9, o = { attack: .006, hold: dur * .3, vib: 5.5, vibDepth: f * .006 };
-      snd.voice('square', f, f, dur, .045, { ...o, delay: d, lp: 4200, lp1: 1800 });
-      snd.voice('sawtooth', f, f, dur, .016, { ...o, delay: d, detune: 8, lp: 3000 });
-      [.5, .28, .15].forEach((v, i) => snd.voice('square', f, f, dur, .045 * v, { ...o, delay: d + (i + 1) * 3 * S, lp: 3000 - i * 700, lp1: 1200, wet: .2 }));
+      const f = hz(ln[0]), dur = Math.min(ln[1], 4) * S * .9, o = { attack: .006, hold: dur * .3, vib: 5.5, vibDepth: f * .006, send: echoIn() };
+      snd.voice('square', f, f, dur, .05, { ...o, delay: d, lp: 4200, lp1: 1800 });
+      snd.voice('sawtooth', f, f, dur, .018, { ...o, delay: d, detune: 8, lp: 3000 });
     }
   }
   function tick() {
     if (!snd || snd.muted) return;
-    const now = clock();
+    const now = snd.now(); if (!now) return; // the audio clock: the same one every note's delay is measured from
     if (next < now) next = now + .05; // after a stall, carry on from now rather than cram the missed notes in
     while (next < now + .25) { note(step++, next - now); next += S; }
   }
   return {
-    start() { if (timer || !snd || snd.muted) return; step = 0; next = clock() + .08; timer = setInterval(tick, 40); tick(); },
+    start() { if (timer || !snd || snd.muted) return; step = 0; next = 0; timer = setInterval(tick, 40); tick(); },
     stop() { clearInterval(timer); timer = 0; },
   };
 })();
