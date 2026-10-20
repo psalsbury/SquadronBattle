@@ -162,10 +162,28 @@ const SONG_LOOP = [
   for (const tk of lead.split(' ')) { const [n, l] = tk.split(':'); if (n !== '.') at[p] = [midi(n) - 12, +l]; p += +l; }
   return [ch, at];
 });
+const MIX_GAIN = .55; // the title music's level
 const music = (() => {
   const S = 60 / 136 / 4; // one sixteenth at 136 bpm
   const BASS = [0, null, 0, 12, null, 0, 12, null, 0, null, 0, 12, null, 7, 12, null]; // a galloping octave pattern
-  let timer = 0, next = 0, step = 0, echo = null;
+  let timer = 0, next = 0, step = 0, echo = null, mixIn = null, mixCtx = null;
+  // The music's own mix, straight to the speakers rather than through the sound effects' compressor (which the music kept
+  // squeezing hard, and which a phone speaker then had to fight): the deep sub-bass a phone can't play is filtered out,
+  // it's a few dB quieter, and a soft limiter only catches the odd peak.
+  function mix() {
+    const gr = snd.graph(); if (!gr) return undefined;
+    if (mixCtx === gr.ctx) return mixIn;
+    const a = gr.ctx, hp = a.createBiquadFilter(), gain = a.createGain(), lim = a.createDynamicsCompressor();
+    hp.type = 'highpass'; hp.frequency.value = 80; hp.Q.value = .7;
+    gain.gain.value = MIX_GAIN;
+    lim.threshold.value = -6; lim.knee.value = 4; lim.ratio.value = 8; lim.attack.value = .005; lim.release.value = .2;
+    hp.connect(gain).connect(lim).connect(a.destination);
+    mixCtx = a; mixIn = hp; echo = null; window.__sqMusicLimiter = lim; // (the limiter is read by the sound tests)
+    return hp;
+  }
+  // Every music note goes into that mix.
+  const voice = (type, f0, f1, dur, vol, o = {}) => snd.voice(type, f0, f1, dur, vol, { ...o, dest: mix() });
+  const hiss = (dur, vol, type, f0, f1, o = {}) => snd.hiss(dur, vol, type, f0, f1, { ...o, dest: mix() });
   // The lead's echo: a dotted-eighth delay feeding back on itself through a low-pass, so each repeat is about half as loud
   // and a little darker (.5, .28, .15, ...). Built once per audio context; voices reach it through their `send`.
   function echoIn() {
@@ -173,20 +191,20 @@ const music = (() => {
     if (echo && echo.ctx === gr.ctx) return echo.input;
     const a = gr.ctx, input = a.createGain(), dl = a.createDelay(1), tone = a.createBiquadFilter(), fb = a.createGain();
     input.gain.value = .5; dl.delayTime.value = 3 * S; tone.type = 'lowpass'; tone.frequency.value = 2200; fb.gain.value = .56;
-    input.connect(dl); dl.connect(tone); tone.connect(fb).connect(dl); tone.connect(gr.bus);
+    input.connect(dl); dl.connect(tone); tone.connect(fb).connect(dl); tone.connect(mix());
     echo = { ctx: a, input };
     return input;
   }
   // The drum kit
-  const kick = d => { snd.voice('sine', 190, 40, .3, .55, { delay: d, sweep: .08, drive: 1.4 }); snd.hiss(.012, .18, 'highpass', 3000, 3000, { delay: d }); };
+  const kick = d => { voice('sine', 190, 40, .3, .55, { delay: d, sweep: .08, drive: 1.4 }); hiss(.012, .18, 'highpass', 3000, 3000, { delay: d }); };
   const snare = (d, v = 1) => {
-    snd.hiss(.22, .28 * v, 'bandpass', 1900, 900, { delay: d, q: .6, drive: 2, wet: .25 });
-    snd.hiss(.08, .12 * v, 'highpass', 6000, 6000, { delay: d });
-    snd.voice('triangle', 260, 170, .12, .14 * v, { delay: d });
+    hiss(.22, .28 * v, 'bandpass', 1900, 900, { delay: d, q: .6, drive: 2, wet: .25 });
+    hiss(.08, .12 * v, 'highpass', 6000, 6000, { delay: d });
+    voice('triangle', 260, 170, .12, .14 * v, { delay: d });
   };
-  const clap = d => { for (let i = 0; i < 3; i++) snd.hiss(i < 2 ? .012 : .12, .14, 'bandpass', 1300, 1100, { delay: d + i * .011, q: 1.2, wet: .3 }); };
-  const tom = (d, f) => snd.voice('sine', f, f * .45, .22, .32, { delay: d, sweep: .18, drive: 1.3 });
-  const hat = (d, v) => snd.hiss(.03, v, 'highpass', 8000, 8000, { delay: d });
+  const clap = d => { for (let i = 0; i < 3; i++) hiss(i < 2 ? .012 : .12, .14, 'bandpass', 1300, 1100, { delay: d + i * .011, q: 1.2, wet: .3 }); };
+  const tom = (d, f) => voice('sine', f, f * .45, .22, .32, { delay: d, sweep: .18, drive: 1.3 });
+  const hat = (d, v) => hiss(.03, v, 'highpass', 8000, 8000, { delay: d });
   function note(step, d) {
     const bar = step >> 4, s = step & 15, intro = bar < 4, lb = (bar - 4) % SONG_LOOP.length;
     const [ch, lead] = intro ? SONG_INTRO[bar] : SONG_LOOP[lb], c = CHORDS[ch], chorus = !intro && lb >= 8;
@@ -194,8 +212,8 @@ const music = (() => {
     // Drums: hats first, the kit from bar 3; four on the floor and claps in the chorus; a crash at the top of each section;
     // a synth-tom roll at the end of each section
     if (s % 2 === 0) hat(d, s % 4 ? .035 : .055); else if (chorus) hat(d, .018);
-    if (s === 14 && !intro && !fill) snd.hiss(.16, .045, 'highpass', 6000, 6000, { delay: d }); // open hat
-    if (!intro && s === 0 && (lb === 0 || lb === 8)) snd.hiss(1.3, .13, 'highpass', 5000, 2500, { delay: d, wet: .35 }); // crash
+    if (s === 14 && !intro && !fill) hiss(.16, .045, 'highpass', 6000, 6000, { delay: d }); // open hat
+    if (!intro && s === 0 && (lb === 0 || lb === 8)) hiss(1.3, .13, 'highpass', 5000, 2500, { delay: d, wet: .35 }); // crash
     if (!intro || bar >= 2) {
       if (fill && s >= 12) tom(d, [240, 190, 150, 115][s - 12]);
       else {
@@ -205,15 +223,15 @@ const music = (() => {
       }
     }
     // Bass
-    if (BASS[s] !== null) { const f = hz(c[0] + BASS[s]); snd.voice('sawtooth', f, f, S * 1.6, .1, { delay: d, lp: 1400, lp1: 300, q: 3 }); }
+    if (BASS[s] !== null) { const f = hz(c[0] + BASS[s]); voice('sawtooth', f, f, S * 1.6, .1, { delay: d, lp: 1400, lp1: 300, q: 3 }); }
     // Arpeggio: up and down the chord, quietly
-    { const f = hz([c[1], c[2], c[3], c[1] + 12, c[3], c[2]][s % 6] + 12); snd.voice('square', f, f, S * .8, intro ? .012 + bar * .003 : .016, { delay: d, lp: 2600 }); }
+    { const f = hz([c[1], c[2], c[3], c[1] + 12, c[3], c[2]][s % 6] + 12); voice('square', f, f, S * .8, intro ? .012 + bar * .003 : .016, { delay: d, lp: 2600 }); }
     // Lead: a plucky square with its three echoes, each a dotted eighth later, quieter and darker
     const ln = lead && lead[s];
     if (ln) {
       const f = hz(ln[0]), dur = Math.min(ln[1], 4) * S * .9, o = { attack: .006, hold: dur * .3, vib: 5.5, vibDepth: f * .006, send: echoIn() };
-      snd.voice('square', f, f, dur, .05, { ...o, delay: d, lp: 4200, lp1: 1800 });
-      snd.voice('sawtooth', f, f, dur, .018, { ...o, delay: d, detune: 8, lp: 3000 });
+      voice('square', f, f, dur, .05, { ...o, delay: d, lp: 4200, lp1: 1800 });
+      voice('sawtooth', f, f, dur, .018, { ...o, delay: d, detune: 8, lp: 3000 });
     }
   }
   function tick() {
