@@ -518,6 +518,33 @@ function drawShip(c, x, y, bank = 0, s = 1, flame = true) {
   if (flame && Math.floor(performance.now() / 400) % 2) { circ(c, -17, 9, 1, '#ff3d6e'); circ(c, 17, 9, 1, '#5cf08a'); }
   c.restore();
 }
+// The player's hit area follows the ship's shape (Pete, 2026-10-21: an enemy shot hit a wing and nothing happened, because
+// only a ~3 px circle at the centre counted). Fuselage and nose, both swept wings and the engine pods, each traced about
+// a pixel inside the drawing so a shot that only brushes the very edge doesn't count. In ship units (see drawShip), before
+// banking narrows it.
+const SHIP_HIT = [
+  [0, -19, 3.4, -11, 3.9, 6, 2.6, 9.5, -2.6, 9.5, -3.9, 6, -3.4, -11],   // fuselage and nose
+  [-3, -2.5, -16, 7.6, -16, 10, -4, 7.4],                                // left wing
+  [3, -2.5, 16, 7.6, 16, 10, 4, 7.4],                                    // right wing
+  [-6, 2.5, 6, 2.5, 5.8, 11.4, -5.8, 11.4],                              // engine pods
+];
+// True if a circle (x, y, r) touches the player's ship.
+function shipHit(x, y, r) {
+  const sx = 1 - Math.abs(P.bank) * .22, lx = (x - P.x) / sx, ly = y - P.y;
+  if (lx < -16 - r || lx > 16 + r || ly < -19 - r || ly > 11.4 + r) return false;
+  for (const poly of SHIP_HIT) {
+    let inside = false;
+    for (let i = 0, j = poly.length - 2; i < poly.length; j = i, i += 2) {
+      const xi = poly[i], yi = poly[i + 1], xj = poly[j], yj = poly[j + 1];
+      if ((yi > ly) !== (yj > ly) && lx < (xj - xi) * (ly - yi) / (yj - yi) + xi) inside = !inside;
+      // distance from the circle's centre to this edge
+      const dx = xi - xj, dy = yi - yj, k = Math.max(0, Math.min(1, ((lx - xj) * dx + (ly - yj) * dy) / (dx * dx + dy * dy || 1)));
+      if (Math.hypot(lx - (xj + dx * k), ly - (yj + dy * k)) < r) return true;
+    }
+    if (inside) return true;
+  }
+  return false;
+}
 // Engine exhaust: a flickering flame, pointing up the screen by default (most Kesh fly down); ang turns it.
 function exhaust(c, x, y, w, len, col, ang = 0) {
   const f = len * (.7 + R() * .5);
@@ -1354,7 +1381,7 @@ function update(dt) {
     if (!def.air) e.y += spd * dt;
     if (def.up && e.t >= 0) def.up(e, dt);
     if (e.y > H + 70 || e.x < -100 || e.x > W + 100 || e.y < -260) { if (!e.dead) { e.dead = true; e.escaped = true; if (e.form && G.form[e.form]) G.form[e.form].broken = true; } }
-    if (def.air && P.alive && P.inv <= 0 && !G.trans && !def.nohit && e.t >= 0 && (!def.hittable || def.hittable(e)) && Math.hypot(e.x - P.x, e.y - P.y) < e.r * .8 + 5) { damage(e, 6); die(); }
+    if (def.air && P.alive && P.inv <= 0 && !G.trans && !def.nohit && e.t >= 0 && (!def.hittable || def.hittable(e)) && shipHit(e.x, e.y, e.r * .8)) { damage(e, 6); die(); }
   }
   // Shots against enemies and the boss
   for (const s of G.ps) {
@@ -1380,12 +1407,12 @@ function update(dt) {
   updateBoss(dt);
   // The boss's body is solid too
   const b = G.boss;
-  if (b && P.alive && P.inv <= 0 && !G.trans && b.enter <= 0 && !b.dying) for (const p of b.parts) if (p.alive && Math.hypot(b.x + p.dx - P.x, b.y + p.dy - P.y) < p.r + 4) die();
+  if (b && P.alive && P.inv <= 0 && !G.trans && b.enter <= 0 && !b.dying) for (const p of b.parts) if (p.alive && shipHit(b.x + p.dx, b.y + p.dy, p.r)) die();
   // Enemy bullets
   for (const e of G.eb) {
     e.x += e.vx * dt; e.y += e.vy * dt;
     if (!(e.y > -20 && e.y < H + 20 && e.x > -20 && e.x < W + 20)) e.gone = true; // also drops NaN
-    else if (P.alive && P.inv <= 0 && !G.trans && Math.abs(e.x - P.x) < 9 && Math.abs(e.y - P.y) < 9 && Math.hypot(e.x - P.x, e.y - P.y) < e.r + 3.2) { e.gone = true; die(); }
+    else if (P.alive && P.inv <= 0 && !G.trans && shipHit(e.x, e.y, e.r * .75)) { e.gone = true; die(); } // the bullet's soft glow doesn't count, its core does
   }
   G.eb = G.eb.filter(e => !e.gone);
   // Items
