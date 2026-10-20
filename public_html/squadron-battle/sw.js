@@ -1,8 +1,8 @@
 // Squadron Battle service worker: makes the game installable and playable offline.
 // Pages load from the network first (so updates show straight away) and fall back to the cache offline.
 // Scripts, icons and fonts come from the cache and refresh in the background. The API (leaderboard) is never cached.
-const CACHE = 'sq-v18';
-const PRECACHE = ['/squadron-battle/', 'game.js?v=18', '/assets/auth.js?v=3', '/assets/game-home.js?v=2', '/assets/game-home.css?v=1', '/assets/sfx.js?v=4', 'icon-192.png', 'manifest.webmanifest'];
+const CACHE = 'sq-v19';
+const PRECACHE = ['/squadron-battle/', 'game.js?v=19', '/assets/auth.js?v=3', '/assets/game-home.js?v=2', '/assets/game-home.css?v=mobile-3', '/assets/sfx.js?v=4', 'icon-192.png', 'manifest.webmanifest'];
 
 self.addEventListener('install', e => {
   e.waitUntil(caches.open(CACHE).then(c => c.addAll(PRECACHE)).then(() => self.skipWaiting()));
@@ -19,7 +19,7 @@ self.addEventListener('fetch', e => {
   const fonts = url.hostname === 'fonts.googleapis.com' || url.hostname === 'fonts.gstatic.com';
   if (!ours && !fonts) return; // the API and everything else go straight to the network
   if (req.mode === 'navigate') {
-    e.respondWith(fetch(req).then(res => { const copy = res.clone(); caches.open(CACHE).then(c => c.put(req, copy)); return res; })
+    e.respondWith(fetch(req).then(res => { if (res.ok) { const copy = res.clone(); caches.open(CACHE).then(c => c.put(req, copy)); } return res; }) // never cache an error page over the game
       .catch(() => caches.match(req).then(r => r || caches.match('/squadron-battle/'))));
     return;
   }

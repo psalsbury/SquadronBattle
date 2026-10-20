@@ -87,7 +87,13 @@ const EXPLOSION = {
   big: v => a => explosionBuffer(a, 21 + v, 2.2, { bright: 2200, darken: 3, debris: 40, roar: .85, rumble: .8, debrisVol: .35, crack: .4, thud: .8, thudHz: 55, thudLen: .3 }),
   huge: v => a => explosionBuffer(a, 31 + v, 3.2, { bright: 3000, darken: 1.8, debris: 70, roar: .9, rumble: 1, debrisVol: .35, crack: .45, thud: 1, thudHz: 45, thudLen: .45 }),
 };
-const primeExplosions = () => { if (!snd) return; for (let v = 0; v < 3; v++) snd.prime('xs' + v, EXPLOSION.small(v)); for (let v = 0; v < 2; v++) { snd.prime('xb' + v, EXPLOSION.big(v)); snd.prime('xh' + v, EXPLOSION.huge(v)); } };
+let priming = false;
+const primeExplosions = () => {
+  if (!snd || priming) return; priming = true;
+  const jobs = [0, 1, 2].map(v => ['xs' + v, EXPLOSION.small(v)]).concat([0, 1].flatMap(v => [['xb' + v, EXPLOSION.big(v)], ['xh' + v, EXPLOSION.huge(v)]]));
+  const next = () => { const j = jobs.shift(); if (!j) { priming = false; return; } snd.prime(j[0], j[1]); setTimeout(next, 16); };
+  next();
+};
 // Guns and explosions are layered: a bright crack on top, a driven noise body, and a sine "thump" that drops in pitch for the bass.
 const sfx = {
   shot(t) {
@@ -867,7 +873,7 @@ function hitBossPart(b, p, dmg) {
   if (p.core && !coreOpen(b)) { if (R() < .3) burst(b.x + p.dx, b.y + p.dy, 2, ['#9ff3ff'], 60, .2, 1.5); return false; }
   p.hp -= dmg; p.flash = .05;
   if (p.hp <= 0) {
-    p.alive = false; explode(b.x + p.dx, b.y + p.dy, p.core ? 2.5 : 1.5); addScore(p.core ? 0 : 2500, b.x + p.dx, b.y + p.dy, true);
+    p.alive = false; explode(b.x + p.dx, b.y + p.dy, p.core ? 2.5 : 1.5); if (!p.core) addScore(2500, b.x + p.dx, b.y + p.dy, true);
     if (p.core) {
       b.dying = 2.4; b.parts.forEach(q => q.alive = false); G.eb.length = 0;
       addScore(b.cave ? 8000 + 4000 * G.si : 20000 + 10000 * G.si, b.x, b.y, true); sfx.clear();
@@ -1094,11 +1100,11 @@ function fire() {
   sfx.shot(G.now); G.firedAt = G.now;
 }
 function die() {
-  if (!P.alive || P.inv > 0) return;
+  if (!P.alive || P.inv > 0 || G.trans) return; // safe while diving or surfacing
   P.alive = false; P.respawn = 1.5; G.deathsStage++;
   explode(P.x, P.y, 2.2); burst(P.x, P.y, 20, ['#eef3ff', '#39d5ff', '#ff8a3d'], 200, 1, 3); sfx.die(); buzz([60, 40, 120]); shake(10);
   G.lives--;
-  if (G.lives < 0) { G.overT = 1.8; return; }
+  if (G.lives < 0) { G.overT = 1.8; G.clearT = 0; return; } // out of ships: game over, even if the boss has just gone down
   P.wl = Math.max(1, P.wl - 1);
 }
 function respawn() {
@@ -1121,7 +1127,7 @@ function damage(e, dmg) {
   if (def.nohit || e.dead) return;
   e.hp -= dmg; e.flash = .05;
   if (e.hp > 0) return;
-  e.dead = true; G.kills++;
+  e.dead = true; if (e.k !== 'cache') G.kills++; // spawned leaves caches out too
   explode(e.x, e.y, def.big || (def.air ? .8 : 1), !def.air);
   if (!def.air) G.decals.push({ x: e.x, y: e.y, r: e.r * .9 });
   addScore(def.score, e.x, e.y, def.score >= 500);
@@ -1179,7 +1185,7 @@ function newRun(si, practice) {
 }
 function startStage(si) {
   Object.assign(G, { si, mode: 'surf', d: 0, cd: 0, t: 0, ct: 0, tl: buildTimeline(si), ti: 0, en: [], eb: [], ps: [], it: [], fx: [], txt: [], decals: [], form: {}, boss: null,
-    deathsStage: 0, kills: 0, spawned: 0, speed: 42, trans: null, fade: 1, flash: 0, bombFx: 0, clearT: 0, overT: 0, gateDone: false, gateHint: 0, bossWarn: 0, rescued: 0, gems: 0, stageScore: G.score, warnUp: null });
+    deathsStage: 0, kills: 0, spawned: 0, speed: 42, trans: null, fade: 1, flash: 0, bombFx: 0, clearT: 0, overT: 0, gateDone: false, gateHint: 0, bossWarn: 0, rescued: 0, gems: 0, stageScore: G.score, warnUp: null, shield: false });
   G.banner = { text: `STAGE ${si + 1}`, sub: STAGES[si].name, t: 2.8 };
   G.clouds = Array.from({ length: 5 }, () => ({ x: R() * W, y: R() * H, r: rr(50, 110), a: rr(.05, .12) }));
   chunkCache.clear();
@@ -1254,7 +1260,7 @@ function update(dt) {
     if (!def.air) e.y += spd * dt;
     if (def.up && e.t >= 0) def.up(e, dt);
     if (e.y > H + 70 || e.x < -100 || e.x > W + 100 || e.y < -260) { if (!e.dead) { e.dead = true; e.escaped = true; if (e.form && G.form[e.form]) G.form[e.form].broken = true; } }
-    if (def.air && P.alive && P.inv <= 0 && !def.nohit && e.t >= 0 && (!def.hittable || def.hittable(e)) && Math.hypot(e.x - P.x, e.y - P.y) < e.r * .8 + 5) { damage(e, 6); die(); }
+    if (def.air && P.alive && P.inv <= 0 && !G.trans && !def.nohit && e.t >= 0 && (!def.hittable || def.hittable(e)) && Math.hypot(e.x - P.x, e.y - P.y) < e.r * .8 + 5) { damage(e, 6); die(); }
   }
   // Shots against enemies and the boss
   for (const s of G.ps) {
@@ -1280,12 +1286,12 @@ function update(dt) {
   updateBoss(dt);
   // The boss's body is solid too
   const b = G.boss;
-  if (b && P.alive && P.inv <= 0 && b.enter <= 0 && !b.dying) for (const p of b.parts) if (p.alive && Math.hypot(b.x + p.dx - P.x, b.y + p.dy - P.y) < p.r + 4) die();
+  if (b && P.alive && P.inv <= 0 && !G.trans && b.enter <= 0 && !b.dying) for (const p of b.parts) if (p.alive && Math.hypot(b.x + p.dx - P.x, b.y + p.dy - P.y) < p.r + 4) die();
   // Enemy bullets
   for (const e of G.eb) {
     e.x += e.vx * dt; e.y += e.vy * dt;
     if (!(e.y > -20 && e.y < H + 20 && e.x > -20 && e.x < W + 20)) e.gone = true; // also drops NaN
-    else if (P.alive && P.inv <= 0 && Math.abs(e.x - P.x) < 9 && Math.abs(e.y - P.y) < 9 && Math.hypot(e.x - P.x, e.y - P.y) < e.r + 3.2) { e.gone = true; die(); }
+    else if (P.alive && P.inv <= 0 && !G.trans && Math.abs(e.x - P.x) < 9 && Math.abs(e.y - P.y) < 9 && Math.hypot(e.x - P.x, e.y - P.y) < e.r + 3.2) { e.gone = true; die(); }
   }
   G.eb = G.eb.filter(e => !e.gone);
   // Items
@@ -1685,7 +1691,7 @@ function pause() {
 }
 function resume() { if (G.state !== 'paused') return; hideOver(); G.state = 'play'; last = performance.now(); acc = 0; }
 function stageCleared() {
-  const si = G.si, bonusMiss = G.deathsStage === 0 ? 10000 : 0, kills = G.spawned ? Math.round(G.kills / G.spawned * 100) : 0, killBonus = kills * 100;
+  const si = G.si, bonusMiss = G.deathsStage === 0 ? 10000 : 0, kills = G.spawned ? Math.min(100, Math.round(G.kills / G.spawned * 100)) : 0, killBonus = kills * 100;
   addScore(bonusMiss + killBonus);
   recordClear();
   G.state = 'clear';
@@ -1890,7 +1896,7 @@ EK.vent = { hp: 12, r: 16, score: 1200, air:false,
   dr(c,e) { ell(c,e.x,e.y,19,13,'#332329');ell(c,e.x,e.y,13,8,hitCol(e,e.cool<1?'#ffe072':'#d74925'));if(e.cool<1){c.strokeStyle='#ffc35a';c.lineWidth=2;c.beginPath();c.arc(e.x,e.y,22+Math.sin(e.t*9)*3,0,TAU);c.stroke();} },
 };
 EK.generator = { hp:32,r:22,score:3000,air:false,big:1.7,
-  up(e,dt) {e.y=Math.min(e.y,145);},
+  up(e,dt) {e.y=Math.min(e.y,G.boss?250:145);}, // below the Dreadnought once it arrives
   dr(c,e) {c.fillStyle=hitCol(e,'#4e477e');c.fillRect(e.x-19,e.y-18,38,36);circ(c,e.x,e.y,12,'#39d5ff');c.strokeStyle='#9ff3ff';c.lineWidth=2;c.beginPath();c.arc(e.x,e.y,27+Math.sin(e.t*4)*3,0,TAU);c.stroke();text(c,'SHIELD',e.x,e.y+35,10,'#9ff3ff');},
 };
 function encounter() {
@@ -1900,16 +1906,18 @@ function encounter() {
   if(G.si===2)for(let i=0;i<3;i++)spawnEnemy('frostHunter',{x:65+i*115,y:40+i*35,alpha:.12,t:i*.7});
   if(G.si===3)for(const x of [90,270])spawnEnemy('nest',{x,y:-20,cool:2.4});
   if(G.si===4)for(const x of [70,290])spawnEnemy('vent',{x,y:-20,cool:2});
-  if(G.si===5)spawnEnemy('generator',{x:180,y:-25});
+  if(G.si===5){G.shield=true;spawnEnemy('generator',{x:180,y:-25});}
 }
+// The Citadel shield only covers the surface. It stays up until the generator is destroyed, even across a dive.
+const shieldUp=()=>G.shield&&G.mode==='surf';
 const originalCoreOpen=coreOpen;
-coreOpen=function(b){return !G.en.some(e=>e.k==='generator'&&!e.dead)&&originalCoreOpen(b);};
+coreOpen=function(b){return !shieldUp()&&originalCoreOpen(b);};
 const originalDamage=damage;
 damage=function(e,dmg){
-  if(e.k!=='generator'&&!EK[e.k].air&&G.en.some(q=>q.k==='generator'&&!q.dead)&&!G.training){burst(e.x,e.y,2,['#9ff3ff'],30,.15,1);return;}
+  if(e.k!=='generator'&&!EK[e.k].air&&shieldUp()&&!G.training){burst(e.x,e.y,2,['#9ff3ff'],30,.15,1);return;}
   const alive=!e.dead;originalDamage(e,dmg);
   if(alive&&e.dead&&e.form&&G.form[e.form]?.left===0&&!G.form[e.form].broken){G.formations++;radio('formation');}
-  if(alive&&e.dead&&e.k==='generator')G.encounterTitle={text:'SHIELD DOWN',tip:'The Citadel is vulnerable.',left:3};
+  if(alive&&e.dead&&e.k==='generator')G.shield=false,G.encounterTitle={text:'SHIELD DOWN',tip:'The Citadel is vulnerable.',left:3};
 };
 const originalDrawBoss=drawBoss;
 drawBoss=function(c){
@@ -1974,8 +1982,11 @@ function renderDaily(){
   el.innerHTML=`<div class="mission-head"><div><p class="fine">DAILY SORTIE · ${esc(c.day)}</p><h2>${esc(c.title)}</h2></div><span class="mission-time">2 MIN</span></div><p>${esc(c.description)}</p><p class="fine">${esc(STAGES[c.stage].name)} · Pilot difficulty · ${WEAPONS[c.weapon].name} level 3 · Same flight plan for everyone.</p><div class="row"><button class="btn primary" id="dailyPlay">${best?'Fly again':'Fly today’s sortie'}</button><button class="btn" id="flightSchool">Flight school</button></div><p class="fine">${best?'Your best on this device: '+best.toLocaleString()+'. ':''}Resets at midnight UK time. ${me?'Your best submitted score ranks below.':'Sign in before flying to join the daily leaderboard.'}</p><ol class="daily-board">${dailyData.rows.length?dailyData.rows.map((r,i)=>`<li><span>${i+1}. ${esc(SUK.firstName(r.name))}</span><b>${r.score.toLocaleString()}</b></li>`).join(''):'<li>No scores yet. Take the first sortie.</li>'}</ol>${dailyData.mine?`<p class="fine">Your daily rank: ${dailyData.mine.rank} · Best: ${dailyData.mine.score.toLocaleString()}</p>`:''}<p class="fine" id="dailyStatus" role="status"></p>`;
   $('dailyPlay').onclick=beginDaily;$('flightSchool').onclick=beginTraining;
 }
-async function beginDaily(){
-  const btn=$('dailyPlay');if(btn)btn.disabled=true;
+async function beginDaily(e){
+  // Started from the menu (#dailyPlay) or the results screen's Fly again (#dailyAgain): disable that button, and report a
+  // failure where the player is looking.
+  const btn=e?.currentTarget||$('dailyPlay'),again=btn&&btn.id==='dailyAgain';if(btn)btn.disabled=true;
+  if(again){const el=$('dailySaved');if(el)el.textContent='Starting a new sortie…';}
   try{
     const result=await SUK.api('sq_daily_start',{}),cfg=result.mission;
     const reached=save.reached;
@@ -1985,14 +1996,16 @@ async function beginDaily(){
     try{G.diff=1;P.wt=cfg.weapon;P.wl=3;startStage(cfg.stage);G.tl=dailyTimeline(cfg);G.help=0;G.banner={text:'DAILY SORTIE',sub:cfg.title,t:2.4};
       if(cfg.type==='rescue')dailyCave();
     }finally{inSimulation=false;}
-  }catch(e){const el=$('dailyStatus');if(el)el.textContent=e.message||'The mission could not start. Try again.';}finally{if(btn)btn.disabled=false;}
+  }catch(err){const el=$(again?'dailySaved':'dailyStatus');if(el)el.textContent=err.message||'The mission could not start. Try again.';}finally{if(btn)btn.disabled=false;}
 }
 function dailyCave(){
   G.mode='cave';G.cd=0;G.ct=0;G.cspeed=54;G.ctl=buildCave(G.si);G.cti=0;G.en=[];G.eb=[];G.ps=[];G.it=[];G.boss=null;
   P.x=P.tx=180;P.y=P.ty=560;P.inv=2;
 }
 const originalSurface=startSurface;
-startSurface=function(){if(G.daily?.type==='rescue'){G.daily.bosses++;dailyCave();return;}originalSurface();};
+startSurface=function(){if(G.daily?.type==='rescue'){G.daily.bosses++;dailyCave();return;}originalSurface();
+  const then=G.trans.then;G.trans.then=()=>{then();if(G.shield)spawnEnemy('generator',{x:180,y:-25});}; // the generator is still there
+};
 async function finishDaily(survived){
   const d=G.daily;if(!d||d.finished)return;d.finished=true;G.state='clear';
   save.dailyBests[d.day]=Math.max(save.dailyBests[d.day]||0,G.score);store();
@@ -2065,7 +2078,7 @@ function featureHUD(c){
     const ry=P.y>H/2?(G.boss||G.daily?94:74):H-105;c.fillStyle='rgba(5,8,20,.82)';c.beginPath();c.roundRect(10,ry,340,40,8);c.fill();
     const words=G.radio.text.split(' ');let lines=[''];for(const word of words){const i=lines.length-1;if((lines[i]+word).length>43)lines.push(word+' ');else lines[i]+=word+' ';}lines.slice(0,2).forEach((s,i)=>text(c,s.trim(),180,ry+12+i*15,10,'#e1f4ff'));
   }
-  if(G.boss&&!G.boss.dying&&G.boss.enter<=0)text(c,coreOpen(G.boss)?'CORE EXPOSED':'DESTROY THE GREEN-RINGED GUNS',180,77,9,coreOpen(G.boss)?'#5cf08a':'#eaf0ff');
+  if(G.boss&&!G.boss.dying&&G.boss.enter<=0)text(c,coreOpen(G.boss)?'CORE EXPOSED':shieldUp()?'DESTROY THE SHIELD GENERATOR':'DESTROY THE GREEN-RINGED GUNS',180,77,9,coreOpen(G.boss)?'#5cf08a':'#eaf0ff');
 }
 const originalDrawHUD=drawHUD;
 drawHUD=function(c){originalDrawHUD(c);featureHUD(c);};
