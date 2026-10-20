@@ -312,6 +312,7 @@ const music = (() => {
     p.srcs.push(src); p.looped = true;
   }
   return {
+    prepare() { if (snd && !snd.muted) prepare(); }, // work the recording out ahead of time, so it starts at once
     start() { if (wanted || !snd || snd.muted) return; wanted = true; prepare(); play(); },
     stop() {
       wanted = false; const p = playing; playing = null; if (!p) return;
@@ -1834,6 +1835,17 @@ let tapped = false;
 function syncMusic() { if (tapped && save.music !== 'off' && !menu.hidden && !document.hidden && snd && !snd.muted) music.start(); else music.stop(); }
 const firstTap = e => { tapped = true; if (!e.target.closest || !e.target.closest('#playBtn, .stage-card')) syncMusic(); };
 window.addEventListener('pointerdown', firstTap, true); window.addEventListener('keydown', firstTap, true);
+// Browsers block sound until the visitor has tapped the page, except in a few cases: Chrome allows it when the page was
+// reached by tapping a link on the same site (the Squadron tile on the salsbury.uk games page), when the game is installed
+// as an app on Android, and on desktop for sites people use a lot. So try straight away, and if the audio does start,
+// play the music without waiting for a tap. Otherwise the first tap starts it as before.
+function tryAutoplay() {
+  if (!snd || snd.muted || save.music === 'off') return;
+  music.prepare();
+  const gr = snd.graph(); if (!gr) return; // makes the audio context; it stays suspended unless the browser allows sound
+  const go = () => { if (!tapped && gr.ctx.state === 'running') { tapped = true; syncMusic(); } };
+  go(); gr.ctx.addEventListener('statechange', go); setTimeout(go, 400);
+}
 document.addEventListener('visibilitychange', syncMusic);
 
 // ---------- Home page ----------
@@ -2189,6 +2201,7 @@ async function init() {
   $('ghHowBtn').onclick = () => GH.open('ghHow');
   $('ghBoardBtn').onclick = () => { GH.open('ghBoard'); loadBoard(); };
   renderMenu();
+  tryAutoplay();
   try { await document.fonts.load(`16px ${FONT}`); } catch {}
   drawMenuArt(); window.addEventListener('resize', () => { if (!menu.hidden) drawMenuArt(); });
   if (location.hash === '#ships') shipGallery();
