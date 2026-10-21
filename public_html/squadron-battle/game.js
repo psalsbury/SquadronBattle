@@ -681,12 +681,25 @@ const EK = {
       poly(c, [22, -11, 33, -4, 33, 4, 22, 11], hitCol(e, '#8e98b3')); poly(c, [26, -6, 32, -2, 32, 2, 26, 6], '#9ff3ff');
       if (Math.floor(e.t * 3) % 2) circ(c, 0, -14, 2.2, '#5cf08a');
       c.restore(); } },
-  mine: { hp: 4, r: 10, score: 300, air: true,
+  mine: { hp: 4, r: 20, score: 300, air: true,
     up(e, dt) { e.y += 58 * dt; e.x += Math.sin(e.t * 1.3 + e.ph) * 14 * dt; },
-    die(e) { ring(e.x, e.y, 8 + D().extra * 4, 115, e.t); },
-    dr(c, e) { c.save(); c.translate(e.x, e.y); c.rotate(e.t * 1.6);
-      for (let i = 0; i < 8; i++) { c.rotate(TAU / 8); poly(c, [-2, -8, 2, -8, 0, -14], hitCol(e, KESH.steel)); }
-      circ(c, 0, 0, 9, hitCol(e, KESH.metal)); circ(c, 0, 0, 4 + Math.sin(e.t * 8), '#ff3d6e'); c.restore(); } },
+    die(e) { ring(e.x, e.y, 4 + D().extra * 2, 115, e.t); },
+    dr(c, e) { c.save(); c.translate(e.x, e.y);
+      c.rotate(Math.sin(e.t * 2) * .12);
+      // Twice the original 28-pixel span, with a domed flying-saucer silhouette.
+      c.fillStyle = hitCol(e, '#38465f'); c.beginPath(); c.ellipse(0, 4, 25, 13, 0, 0, TAU); c.fill();
+      const hull = c.createLinearGradient(0, -8, 0, 12);
+      hull.addColorStop(0, hitCol(e, '#e1e9f6')); hull.addColorStop(.45, hitCol(e, '#899bb8')); hull.addColorStop(1, hitCol(e, '#38465f'));
+      c.fillStyle = hull; c.beginPath(); c.ellipse(0, 1, 28, 10, 0, 0, TAU); c.fill();
+      c.strokeStyle = hitCol(e, '#c7d8ee'); c.lineWidth = 1.2; c.stroke();
+      c.fillStyle = hitCol(e, '#63d7ee'); c.beginPath(); c.ellipse(0, -6, 13, 10, 0, Math.PI, TAU); c.fill();
+      c.fillStyle = hitCol(e, '#baf5ff'); c.beginPath(); c.ellipse(-4, -11, 4, 2, -.45, 0, TAU); c.fill();
+      c.strokeStyle = hitCol(e, '#e1e9f6'); c.lineWidth = 2; c.beginPath(); c.ellipse(0, -6, 14, 4, 0, 0, TAU); c.stroke();
+      for (let i = 0; i < 5; i++) {
+        const a = e.t * 1.8 + i * TAU / 5;
+        circ(c, Math.cos(a) * 22, 2 + Math.sin(a) * 6, 2.4, i % 2 ? '#ff3d6e' : '#ffde74');
+      }
+      c.restore(); } },
   cloaker: { hp: 6, r: 13, score: 600, air: true,
     up(e, dt) {
       const cyc = e.t % 3.4; e.alpha = cyc < .6 ? cyc / .6 : cyc < 2.4 ? 1 : cyc < 3 ? 1 - (cyc - 2.4) / .6 : 0;
