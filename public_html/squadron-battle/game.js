@@ -44,7 +44,7 @@ const store = () => { try { localStorage.setItem(SAVE_KEY, JSON.stringify(save))
 
 // ---------- Sound ----------
 const snd = window.SukSound ? window.SukSound('squadron-battle-muted') : null;
-let shotSoundAt = 0, hitSoundAt = 0, popSoundAt = 0, popVar = 0;
+let shotSoundAt = 0, hitSoundAt = 0, popSoundAt = 0, popVar = 0, boomSoundAt = -Infinity;
 // Explosions are worked out sample by sample, once, then played back like recordings:
 // a sharp crack, a roar of noise whose tone darkens as it dies away, a low rolling rumble that lingers,
 // scattered crackles of debris, and a deep thud. Each size has a few variations so repeats don't sound identical.
@@ -109,9 +109,9 @@ const sfx = {
   },
   pop() {
     if (!snd || G.now - popSoundAt < .05) return; popSoundAt = G.now;
-    snd.sample('xs' + (popVar = (popVar + 1) % 3), EXPLOSION.small(popVar), .75, { rate: rr(.88, 1.12) });
+    snd.sample('xs' + (popVar = (popVar + 1) % 3), EXPLOSION.small(popVar), .75, { rate: (.88 + Math.random() * .24) });
   },
-  boom() { snd && snd.sample('xb' + Math.floor(R() * 2), EXPLOSION.big(Math.floor(R() * 2)), .95, { rate: rr(.9, 1.06), wet: .25 }); },
+  boom() { if (!snd || G.now - boomSoundAt < .12) return; boomSoundAt = G.now; const v = Math.floor(Math.random() * 2); snd.sample('xb' + v, EXPLOSION.big(v), .95, { rate: (.9 + Math.random() * .16), wet: .25 }); },
   pick() { snd && snd.chord([660, 880, 1320], .22, .1, { gap: .045 }); },
   power() { snd && snd.chord([523, 659, 784, 1047], .32, .12, { gap: .055, type: 'square', lp: 2600 }); },
   bomb() {
@@ -300,7 +300,7 @@ const music = (() => {
     const a = gr.ctx, out = a.createGain(), lim = a.createDynamicsCompressor(), src = a.createBufferSource(), t0 = a.currentTime + .05;
     lim.threshold.value = -6; lim.knee.value = 4; lim.ratio.value = 8; lim.attack.value = .005; lim.release.value = .2; // only for the odd peak
     out.connect(lim).connect(a.destination); src.buffer = intro; src.loop = true; src.connect(out); src.start(t0);
-    playing = { a, out, srcs: [src], intro: src, t0 };
+    playing = { a, out, lim, srcs: [src], intro: src, t0 };
     queueLoop();
   }
   // The loop comes in at the end of the intro that's playing when it's ready (the intro repeats until then).
@@ -308,6 +308,7 @@ const music = (() => {
     const p = playing; if (!p || !loop || p.looped) return;
     const a = p.a, src = a.createBufferSource(), L = intro.duration;
     const at = p.t0 + Math.ceil((a.currentTime + .1 - p.t0) / L) * L;
+    p.intro.onended = () => { p.intro.disconnect(); p.intro._ended = true; };
     src.buffer = loop; src.loop = true; src.connect(p.out); src.start(at); p.intro.stop(at);
     p.srcs.push(src); p.looped = true;
   }
@@ -317,7 +318,10 @@ const music = (() => {
     stop() {
       wanted = false; const p = playing; playing = null; if (!p) return;
       const t = p.a.currentTime; p.out.gain.setValueAtTime(1, t); p.out.gain.linearRampToValueAtTime(0, t + .15);
-      p.srcs.forEach(s => { try { s.stop(t + .2); } catch {} });
+      p.srcs.forEach(s => {
+        s.onended = () => { s.disconnect(); if (p.srcs.every(n => n === s || n._ended)) { p.out.disconnect(); p.lim.disconnect(); } s._ended = true; };
+        try { s.stop(t + .2); } catch { s.disconnect(); }
+      });
     },
   };
 })();
@@ -556,7 +560,7 @@ function exhaust(c, x, y, w, len, col, ang = 0) {
 function canopy(c, x, y, rx, ry, col) { ell(c, x, y, rx, ry, col); ell(c, x - rx * .3, y - ry * .3, rx * .35, ry * .4, 'rgba(255,255,255,.6)'); }
 const KESH = { dark: '#3d1d5e', mid: '#7a35b8', light: '#c98cff', eye: '#ff4f8b', metal: '#3a3350', steel: '#6c6588' };
 // True for a moment just after a ground gun fires (its cooldown was just reset to period / rate), for the muzzle flash.
-const shotFlash = (e, period) => e.cool > period / DIFF[G.diff].rate - .08;
+const shotFlash = (e, period) => e.cool > period / D().rate - .08;
 const hitCol = (e, col) => e.flash > 0 ? '#ffffff' : col;
 
 // ---------- Game state ----------
@@ -568,7 +572,10 @@ const G = {
   gateDone: false, gateHint: 0, bossWarn: 0, diff: 1, continues: 0, runStart: 0, stageScore: 0, help: 0,
 };
 const P = { x: 180, y: 560, tx: 180, ty: 560, wt: 0, wl: 1, inv: 0, alive: true, respawn: 0, fireT: 0, bank: 0, vx: 0, dive: 0 };
-const D = () => DIFF[G.diff];
+// Underworld pressure is exactly 25% faster enemy fire, including guardians.
+const CAVE_CHALLENGE = 1.25;
+const CAVE_DIFF = DIFF.map(d => ({ ...d, rate: d.rate * CAVE_CHALLENGE }));
+const D = () => G.mode === 'cave' ? CAVE_DIFF[G.diff] : DIFF[G.diff];
 const shake = a => { G.shake = Math.max(G.shake, a); };
 
 function addScore(n, x, y, show) {
@@ -889,14 +896,15 @@ function buildTimeline(si) {
   ev.push({ t: STAGE_T, w: 'boss' });
   return ev.sort((a, b) => a.t - b.t);
 }
-const CAVE_T = 30;
+const CAVE_T = 60; // twice the original 30-second route, at the same scroll speed
 function buildCave(si) {
   const r = rng(9000 + si * 31), ev = [];
   for (let t = 2; t < CAVE_T - 3; t += 2.6 + r()) ev.push({ t, w: 'cturret' });
   for (let t = 3; t < CAVE_T - 4; t += 4.5 + r() * 2) ev.push({ t, w: r() < .5 ? 'swarm' : r() < .5 ? 'weavers' : 'divers', x: 100 + r() * 160 });
-  [5, 11, 21].forEach(t => ev.push({ t, w: 'cache', x: 120 + r() * 120 }));
-  ev.push({ t: 15, w: 'cage', x: 140 + r() * 80 });
+  [5, 11, 21, 35, 41, 51].forEach(t => ev.push({ t, w: 'cache', x: 120 + r() * 120 }));
+  ev.push({ t: 30, w: 'cage', x: 140 + r() * 80 });
   ev.push({ t: 9 + r() * 4, w: 'mines', x: 180 });
+  ev.push({ t: 39 + r() * 4, w: 'mines', x: 180 });
   ev.push({ t: CAVE_T, w: 'cboss' }); // the way back up is guarded; beating it takes you to the surface
   return ev.sort((a, b) => a.t - b.t);
 }
@@ -1000,7 +1008,7 @@ function updateBoss(dt) {
     if (!p.alive) continue;
     p.flash = Math.max(0, p.flash - dt);
     if (p.core && !open) continue;
-    p.pats.forEach((pt, i) => { p.cool[i] -= dt; if (p.cool[i] <= 0) { p.cool[i] += pt[1] / (pt[0] === 'spiral' ? 1 : D().rate); if (P.alive || R() < .3) bossFire(b, p, pt[0]); } });
+    p.pats.forEach((pt, i) => { p.cool[i] -= dt; if (p.cool[i] <= 0) { p.cool[i] += pt[1] / (pt[0] === 'spiral' ? (G.mode === 'cave' ? CAVE_CHALLENGE : 1) : D().rate); if (P.alive || R() < .3) bossFire(b, p, pt[0]); } });
   }
 }
 function hitBossPart(b, p, dmg) {

@@ -22,11 +22,32 @@ function environment(){
   sandbox.window=sandbox;sandbox.addEventListener=noop;sandbox.scrollTo=noop;sandbox.devicePixelRatio=1;sandbox.innerHeight=640;
   vm.createContext(sandbox);
   let source=fs.readFileSync(require('path').resolve(__dirname,'../public_html/squadron-battle/game.js'),'utf8').replace('\ninit();','\n// init omitted in isolated simulation');
+  source=source.replace('window.__sq = {', 'window.__sq = { buildCave, D, DIFF, CAVE_BOSSES, spawnBoss, startDive,');
   vm.runInContext(source,sandbox);return {sq:sandbox.__sq,node,sandbox,mission,posted};
 }
 (async()=>{
   const {sq,node,sandbox,mission,posted}=environment(),f=sq.features;
   sq.play(0,false);assert.equal(sq.G.state,'play');
+  for(let si=0;si<6;si++){
+    sq.startStage(si);
+    const plan=sq.buildCave(si);
+    assert.equal(plan.at(-1).w,'cboss');assert.equal(plan.at(-1).t,60);
+    assert.equal(plan.filter(e=>e.w==='cage').length,1);
+    assert.equal(plan.find(e=>e.w==='cage').t,30);
+    assert(plan.some(e=>e.t>45&&['cturret','swarm','weavers','divers'].includes(e.w)));
+    for(let d=0;d<3;d++){
+      sq.G.diff=d;sq.G.mode='surf';assert.equal(sq.D().rate,sq.DIFF[d].rate);
+      sq.G.mode='cave';assert.equal(sq.D().rate,sq.DIFF[d].rate*1.25);
+      assert.equal(sq.D().hp,sq.DIFF[d].hp);assert.equal(sq.D().bs,sq.DIFF[d].bs);
+    }
+    sq.G.diff=1;sq.G.mode='surf';
+    sq.startDive({x:180,y:400});
+    for(let n=0;n<3800;n++){sq.setInv(100);sq.G.lives=9;sq.update(1/60);}
+    assert(sq.G.boss&&sq.G.boss.cave,'Guardian must spawn after the extended route');
+    sq.render();
+  }
+  sq.play(0,false);
+  console.log('PASS: all six extended caves, rescue timing, second-half enemies, transitions, guardians and 25% fire-rate increase at every difficulty.');
   f.beginTraining();assert.equal(sq.G.training.step,0);
   sq.P.x+=40;sq.P.tx=sq.P.x;sq.update(1/60);assert.equal(sq.G.training.step,1);
   f.collect(sq.G.it[0]);assert.equal(sq.G.training.step,2);assert.equal(sq.P.wl,2);
