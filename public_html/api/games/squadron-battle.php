@@ -1,7 +1,20 @@
 <?php
-// Squadron Battle: its server actions and database tables. Loaded by api/index.php; uses only the core in _lib/bootstrap.php.
+// Squadron Battle: its server actions and database tables. Loaded by api/index.php; uses only the core (_lib/bootstrap.php, plus tx_begin/tx_commit from api/index.php) and nothing from other games' modules.
 if (!defined('SUK')) { http_response_code(404); exit; }
 require_once __DIR__ . '/../_lib/squadron_daily.php';
+
+// Board periods: when today, this week, month and year began (UK time), as unix seconds
+function sq_periods(): array {
+    $tz = new DateTimeZone('Europe/London');
+    $now = new DateTimeImmutable('now', $tz);
+    return [
+        'day' => $now->setTime(0, 0)->getTimestamp(),
+        'week' => $now->modify('monday this week')->setTime(0, 0)->getTimestamp(),
+        'month' => $now->modify('first day of this month')->setTime(0, 0)->getTimestamp(),
+        'year' => $now->setDate((int)$now->format('Y'), 1, 1)->setTime(0, 0)->getTimestamp(),
+        'all' => 0,
+    ];
+}
 
 suk_game('squadron-battle', [
     'sq_score' => ['act_sq_score', true],
@@ -54,7 +67,7 @@ function sq_rank(int $since, int $best): int {
 
 function sq_mine(int $uid): array {
     $out = [];
-    foreach (ff_periods() as $k => $since) {
+    foreach (sq_periods() as $k => $since) {
         $st = db()->prepare('SELECT MAX(score) FROM squadron_scores WHERE user_id = ? AND created_at >= ?');
         $st->execute([$uid, $since]);
         $best = $st->fetchColumn();
@@ -82,7 +95,7 @@ function act_sq_score(): void {
 function act_sq_board(): void {
     $u = current_user();
     $boards = [];
-    foreach (ff_periods() as $k => $since) {
+    foreach (sq_periods() as $k => $since) {
         // SQLite fills the bare columns (stage, diff) from the row with the MAX score.
         $st = db()->prepare('SELECT u.id, u.name, u.picture, MAX(s.score) AS best, s.stage, s.diff, MIN(s.created_at) AS first_at
             FROM squadron_scores s JOIN users u ON u.id = s.user_id
