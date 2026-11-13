@@ -825,6 +825,123 @@ const EK = {
       c.restore(); } },
 };
 
+// ---------- Static gun emplacements ----------
+// The Kesh dig their guns in: small sentry guns in batteries, fixed heavy cannons that fire straight down their lane,
+// sweep guns that rake an arc, launch pads that send up drones, and wall guns in the caves. Batteries sit on armour slabs.
+const gunWin = e => e.y > 20 && e.y < P.y - 70;
+const plate = (c, x, y, w, h, k, fill) => poly(c, [x + k, y, x + w - k, y, x + w, y + k, x + w, y + h - k, x + w - k, y + h, x + k, y + h, x, y + h - k, x, y + k], fill);
+EK.slab = { hp: 0, r: 0, score: 0, air: false, nohit: true,
+  dr(c, e) { const w = e.w, h = e.h, x = e.x - w / 2, y = e.y - h / 2;
+    plate(c, x + 3, y + 4, w, h, 7, 'rgba(0,0,0,.32)'); plate(c, x, y, w, h, 7, '#191621'); plate(c, x + 2, y + 2, w - 4, h - 4, 6, '#353043');
+    c.fillStyle = '#423c53'; c.fillRect(x + 7, y + 2, w - 14, 3); c.fillStyle = '#28243a'; c.fillRect(x + 7, y + h - 5, w - 14, 3);
+    c.strokeStyle = 'rgba(15,12,22,.5)'; c.lineWidth = 1; c.beginPath();
+    for (let px = x + 26; px < x + w - 14; px += 26) { c.moveTo(px, y + 5); c.lineTo(px, y + h - 5); }
+    for (let py = y + 26; py < y + h - 14; py += 26) { c.moveTo(x + 5, py); c.lineTo(x + w - 5, py); }
+    c.stroke();
+    c.fillStyle = KESH.dark; c.fillRect(x + 2, y + h / 2 - 5, 3, 10); c.fillRect(x + w - 5, y + h / 2 - 5, 3, 10);
+    const lit = Math.floor(e.t * 2) % 2;
+    for (const [lx, ly] of [[x + 7, y + 7], [x + w - 7, y + 7], [x + 7, y + h - 7], [x + w - 7, y + h - 7]]) circ(c, lx, ly, 1.5, lit ? '#ff4f8b' : '#5b1f3a');
+  } };
+EK.sentry = { hp: 3, r: 9, score: 200, air: false,
+  up(e, dt) { e.ang = toP(e.x, e.y); e.cool -= dt; if (e.cool <= 0 && gunWin(e)) { e.cool = 2.7 / D().rate; aimed(e.x, e.y, 1, 0, 125); } },
+  dr(c, e) { c.save(); c.translate(e.x, e.y);
+    circ(c, 1.5, 2, 10.5, 'rgba(0,0,0,.35)'); circ(c, 0, 0, 10, '#1d1a26'); circ(c, 0, 0, 8.6, hitCol(e, '#57506a'));
+    for (let i = 0; i < 6; i++) { c.save(); c.rotate(i / 6 * TAU); c.fillStyle = '#1d1a26'; c.fillRect(-1.3, -10, 2.6, 3.2); c.restore(); }
+    c.rotate(e.ang - Math.PI / 2);
+    if (shotFlash(e, 2.7)) { glow(c, 0, 17, 5, '#ffd08a', .7); circ(c, 0, 16, 2.2, '#fff3c0'); }
+    c.fillStyle = hitCol(e, '#1f1b28'); c.fillRect(-1.7, 1, 3.4, 13); c.fillStyle = hitCol(e, '#8d86a8'); c.fillRect(-2.4, 11.5, 4.8, 2.4);
+    circ(c, 0, 0, 5.4, hitCol(e, '#2a2638')); circ(c, 0, 0, 4.3, hitCol(e, '#c98a2e')); circ(c, -1.1, -1.2, 1.7, hitCol(e, '#f0c56a'));
+    circ(c, 0, 1.8, 1.1, KESH.eye); c.restore(); } };
+EK.cannon = { hp: 12, r: 14, score: 600, air: false, big: 1.2,
+  up(e, dt) { e.kick = Math.max(0, (e.kick || 0) - dt * 5);
+    if (e.burst > 0) { e.bt -= dt; if (e.bt <= 0) { e.bt = .2; e.burst--; e.kick = 1; shoot(e.x, e.y + 24, Math.PI / 2, 175, true); } return; }
+    e.cool -= dt; if (e.cool <= 0 && e.y > 10 && e.y < H - 200) { e.cool = 3 / D().rate; e.burst = 2 + D().extra; e.bt = 0; } },
+  dr(c, e) { c.save(); c.translate(e.x, e.y); // a casemate with one big fixed barrel; the muzzle glows before it fires
+    const k = (e.kick || 0) * 4, hot = !e.burst && e.cool < .7 && e.y > 10 && e.y < H - 200;
+    plate(c, -14, -13, 32, 30, 5, 'rgba(0,0,0,.35)'); plate(c, -16, -16, 32, 30, 5, '#1d1a26');
+    plate(c, -14, -14, 28, 26, 4, hitCol(e, '#5a4a52')); c.fillStyle = hitCol(e, '#7a6670'); c.fillRect(-10, -14, 20, 3);
+    c.fillStyle = '#1d1a26'; c.fillRect(-9, -9, 18, 2); c.fillRect(-9, -5, 18, 2);
+    c.fillStyle = hitCol(e, '#16131c'); c.fillRect(-4.5, 2 - k, 9, 24); c.fillStyle = hitCol(e, '#8d86a8'); c.fillRect(-6, 21 - k, 12, 5); c.fillStyle = '#0a0810'; c.fillRect(-2.5, 24 - k, 5, 2);
+    if (hot) glow(c, 0, 26, 5 + 2 * Math.sin(e.t * 18), '#ff8a3d', .75);
+    if (e.kick > .6) { glow(c, 0, 30, 9, '#ffd08a', .8); circ(c, 0, 29, 3.5, '#fff3c0'); }
+    circ(c, 0, -1, 7, hitCol(e, '#2a2638')); circ(c, 0, -1, 5.6, hitCol(e, '#b0483a')); circ(c, -1.5, -2.5, 2.2, hitCol(e, '#e08a6a'));
+    circ(c, 10, -10, 1.5, hot && Math.floor(e.t * 10) % 2 ? '#ffde74' : '#5b1f3a');
+    c.restore(); } };
+EK.sweeper = { hp: 10, r: 13, score: 500, air: false, big: 1.1,
+  up(e, dt) { e.ang = Math.PI / 2 + Math.sin(e.t * 1.15 + e.ph) * 1.05; e.fl = Math.max(0, (e.fl || 0) - dt); e.cool -= dt;
+    if (e.cool <= 0 && gunWin(e)) { e.n = (e.n || 0) + 1; e.cool = (e.n % 6 ? .3 : 2) / D().rate; e.fl = .08; shoot(e.x + Math.cos(e.ang) * 18, e.y + Math.sin(e.ang) * 18, e.ang, 135); } },
+  dr(c, e) { c.save(); c.translate(e.x, e.y); // a turntable with a long twin barrel that rakes from side to side
+    const hex = r => { const p = []; for (let i = 0; i < 6; i++) { const a = i / 6 * TAU; p.push(Math.cos(a) * r, Math.sin(a) * r); } return p; };
+    c.save(); c.translate(2, 3); poly(c, hex(16), 'rgba(0,0,0,.35)'); c.restore();
+    poly(c, hex(16), '#1d1a26'); poly(c, hex(14), hitCol(e, '#3f5560'));
+    c.strokeStyle = '#7fb6c4'; c.lineWidth = 1; c.beginPath(); c.arc(0, 0, 10.5, .5, Math.PI - .5); c.stroke();
+    c.rotate(e.ang - Math.PI / 2);
+    if (e.fl > 0) { glow(c, 0, 24, 6, '#ffd08a', .7); circ(c, 0, 23, 2.4, '#fff3c0'); }
+    c.fillStyle = hitCol(e, '#16131c'); c.fillRect(-3.6, 2, 2.6, 20); c.fillRect(1, 2, 2.6, 20); c.fillStyle = hitCol(e, '#8d86a8'); c.fillRect(-4.4, 12, 8.8, 2.5); c.fillRect(-4.4, 19.5, 8.8, 2.5);
+    ell(c, 0, 0, 7.5, 9, hitCol(e, '#2a2638')); ell(c, 0, 0, 6, 7.5, hitCol(e, '#3fa7b8')); ell(c, -1.5, -2, 2.4, 3, hitCol(e, '#9fe6f0'));
+    circ(c, 0, 4, 1.5, KESH.eye); c.restore(); } };
+EK.launcher = { hp: 14, r: 16, score: 900, air: false, big: 1.3,
+  up(e, dt) { e.open = Math.max(0, (e.open || 0) - dt * 1.1); e.cool -= dt;
+    if (e.cool <= 0 && e.y > 20 && e.y < 330) { e.cool = 4.4 / D().rate; e.open = 1; for (const s of [-1, 1]) spawnEnemy('swarm', { x: e.x + s * 7, y: e.y, vx: s * 40, vy: 110 }); } },
+  dr(c, e) { c.save(); c.translate(e.x, e.y); // a launch pad: the doors slide open and two drones come up
+    const live = e.y > 20 && e.y < 330, warn = live && e.cool < .9, o = Math.max(e.open || 0, warn ? 1 - e.cool / .9 : 0) * 9;
+    plate(c, -17, -16, 38, 38, 6, 'rgba(0,0,0,.35)'); plate(c, -19, -19, 38, 38, 6, '#1d1a26'); plate(c, -17, -17, 34, 34, 5, hitCol(e, '#4a4458'));
+    for (let i = 0; i < 6; i++) { c.fillStyle = i % 2 ? '#e8b923' : '#1a1a1a'; c.fillRect(-15 + i * 5, -17, 5, 3); c.fillRect(-15 + i * 5, 14, 5, 3); }
+    c.fillStyle = '#07060c'; c.fillRect(-11, -11, 22, 22);
+    if (o > 1) { glow(c, 0, 0, 8, '#ff6fd0', .35); poly(c, [-5, 4, -2, -5, 1, 4], '#b0408e'); poly(c, [1, 5, 4, -4, 7, 5], '#b0408e'); }
+    c.fillStyle = hitCol(e, '#6c6588'); c.fillRect(-11, -11, 11 - o, 22); c.fillRect(o, -11, 11 - o, 22);
+    c.fillStyle = 'rgba(20,16,30,.6)'; c.fillRect(-o - 1, -11, 1, 22); c.fillRect(o, -11, 1, 22);
+    for (const [lx, ly] of [[-14, -8], [14, -8], [-14, 8], [14, 8]]) circ(c, lx, ly, 1.5, warn && Math.floor(e.t * 10) % 2 ? '#ffde74' : '#5b1f3a');
+    c.restore(); } };
+// Cave wall gun: bolted to a girder from the rock, with a fixed barrel angled down across the tunnel. side 1 = left wall.
+EK.wallgun = { hp: 8, r: 12, score: 400, air: false,
+  up(e, dt) { e.fl = Math.max(0, (e.fl || 0) - dt); e.cool -= dt;
+    if (e.cool <= 0 && e.y > 20 && e.y < P.y - 40) { e.n = (e.n || 0) + 1; e.cool = (e.n % 2 ? .25 : 2.4) / D().rate; e.fl = .08; const a = Math.PI / 2 - e.side * .75; shoot(e.x + Math.cos(a) * 16, e.y + Math.sin(a) * 16, a, 140); } },
+  dr(c, e) { c.save(); c.translate(e.x, e.y); const s = e.side || 1;
+    c.fillStyle = '#1d1a26'; c.fillRect(s > 0 ? -70 : 0, -5, 70, 10); c.fillStyle = '#4a4458'; c.fillRect(s > 0 ? -70 : 0, -3, 70, 2);
+    c.strokeStyle = '#2a2633'; c.lineWidth = 1.5; c.beginPath(); for (let i = 1; i < 6; i++) { const gx = -s * i * 11; c.moveTo(gx, -5); c.lineTo(gx - s * 8, 5); } c.stroke();
+    circ(c, 1.5, 2, 13, 'rgba(0,0,0,.35)'); circ(c, 0, 0, 12.5, '#1d1a26'); circ(c, 0, 0, 11, hitCol(e, '#5a5a48'));
+    c.rotate(-s * .75);
+    if (e.fl > 0) { glow(c, 0, 22, 6, '#ffd08a', .7); circ(c, 0, 21, 2.4, '#fff3c0'); }
+    c.fillStyle = hitCol(e, '#16131c'); c.fillRect(-2.6, 2, 5.2, 18); c.fillStyle = hitCol(e, '#8d86a8'); c.fillRect(-3.6, 16, 7.2, 3.5);
+    circ(c, 0, 0, 7, hitCol(e, '#2a2638')); circ(c, 0, 0, 5.6, hitCol(e, '#9aa23a')); circ(c, -1.4, -1.6, 2.2, hitCol(e, '#d6dc7a'));
+    circ(c, 0, 2.5, 1.4, KESH.eye); c.restore(); } };
+
+// Battery layouts: slabs [dx, dy, w, h] and units [kind, dx, dy] round the battery's centre (dy negative = further up the screen).
+const BATTERIES = {
+  row: () => ({ slabs: [[0, 0, 196, 36]], units: [-69, -23, 23, 69].map(dx => ['sentry', dx, 0]) }),
+  vee: () => ({ slabs: [[0, -18, 60, 72]], units: [['sentry', -84, -44], ['sentry', -42, -22], ['sentry', 0, 4], ['sentry', 42, -22], ['sentry', 84, -44], ['sentry', 0, -40]] }),
+  flank: () => ({ wide: true, slabs: [[-146, -52, 34, 144], [146, -52, 34, 144]], units: [-1, 1].flatMap(s => [0, 1, 2].map(i => ['sentry', s * 146, -i * 52])) }),
+  cross: () => ({ slabs: [[0, 0, 108, 108]], units: [['cannon', 0, 2], ['sentry', -38, -38], ['sentry', 38, -38], ['sentry', -38, 38], ['sentry', 38, 38]] }),
+  sweep: () => ({ slabs: [[0, 0, 156, 46]], units: [['sweeper', 0, 0], ['sentry', -56, 0], ['sentry', 56, 0]] }),
+  lanes: () => ({ wide: true, slabs: [[-112, 0, 46, 52], [0, -34, 46, 52], [112, 0, 46, 52]], units: [['cannon', -112, 0], ['cannon', 0, -34], ['cannon', 112, 0]] }),
+  pad: () => ({ slabs: [[0, 0, 134, 58]], units: [['launcher', 0, 0], ['sentry', -50, 0], ['sentry', 50, 0]] }),
+  fort: si => ({ wide: true, name: 'GUN FORTRESS', slabs: [[0, -6, 214, 150], [0, 78, 90, 26]],
+    units: [['bunker', 0, -28], ['cannon', -74, 34], ['cannon', 74, 34], ['sentry', -84, -60], ['sentry', 84, -60], ['sentry', -42, -64], ['sentry', 42, -64],
+      ...(si >= 1 ? [['sweeper', 0, 40]] : [['sentry', 0, 40]]), ...(si >= 3 ? [['launcher', -80, -14], ['launcher', 80, -14]] : [])] }),
+};
+const BATTERY_POOL = [
+  ['row', 'cross', 'vee', 'flank', 'lanes'],
+  ['sweep', 'row', 'lanes', 'cross', 'vee'],
+  ['flank', 'sweep', 'pad', 'cross', 'lanes'],
+  ['pad', 'vee', 'sweep', 'cross', 'row'],
+  ['lanes', 'pad', 'sweep', 'flank', 'cross'],
+  ['cross', 'sweep', 'pad', 'lanes', 'flank'],
+];
+function spawnBattery(name, x) {
+  const b = BATTERIES[name](G.si);
+  let bottom = 0, half = 0;
+  for (const [dx, dy, w, h] of b.slabs) { bottom = Math.max(bottom, dy + h / 2); half = Math.max(half, Math.abs(dx) + w / 2); }
+  for (const [, dx, dy] of b.units) { bottom = Math.max(bottom, dy + 20); half = Math.max(half, Math.abs(dx) + 14); }
+  const cx = b.wide ? 180 : clamp(x, half + 6, W - half - 6), cy = -24 - bottom;
+  for (const [dx, dy, w, h] of b.slabs) spawnEnemy('slab', { x: cx + dx, y: cy + dy, w, h });
+  b.units.forEach(([k, dx, dy], i) => spawnEnemy(k, { x: cx + dx, y: cy + dy, cool: k === 'launcher' ? 2.2 : 1.2 + (i % 4) * .45, ph: i }));
+  if (b.name) G.txt.push({ x: 180, y: 150, s: b.name, t: 2.4, col: '#ffcc33', big: true });
+}
+// The new guns are in every campaign stage; daily sorties get them from the day after they went in, so nobody's
+// flight plan changed part-way through a day.
+const gunsOn = () => !G.daily || G.daily.day > '2026-11-13';
+
 function spawnEnemy(k, props) {
   const def = EK[k];
   const e = { k, x: 180, y: -30, t: 0, ph: 0, flash: 0, hp: def.hp * (def.nohit ? 1 : sh()), r: def.r, cool: rr(.4, 1.4), ang: Math.PI / 2, vx: 0, vy: 0, alpha: 1, ...props };
@@ -850,10 +967,12 @@ function spawnWave(w, ev) {
     case 'mines': for (let i = 0; i < 3; i++) spawnEnemy('mine', { x: clamp(ev.x + (i - 1) * 70, 30, W - 30), y: -20 - i * 40, ph: i }); break;
     case 'cloaker': spawnEnemy('cloaker', { x: rr(60, 300), y: rr(80, 220), alpha: 0 }); break;
     case 'swarm': for (let i = 0; i < 6 + G.si; i++) { const x = G.mode === 'cave' ? clamp(ev.x + rr(-40, 40), 100, 260) : clamp(ev.x + rr(-60, 60), 20, W - 20); spawnEnemy('swarm', { x, y: -20 - i * 16, vx: 0, vy: 125 }); } break;
-    case 'turret': case 'tank': case 'bunker': case 'cache': case 'cage':
+    case 'turret': case 'tank': case 'bunker': case 'cache': case 'cage': case 'sentry': case 'cannon': case 'sweeper': case 'launcher':
       spawnEnemy(w, { x: ev.x, y: -30, vx: w === 'tank' ? (R() < .5 ? -32 : 32) : 0 }); break;
     // Cave turrets sit by the wall, but never further out than the ship can reach anywhere in the cave (the walls snake about).
     case 'cturret': { const g = H + G.cd + 30, left = R() < .5; spawnEnemy('turret', { x: left ? Math.max(caveL(g) + 16, 84) : Math.min(caveR(g) - 16, 276), y: -30 }); break; }
+    case 'cwall': { const g = H + G.cd + 30, left = ev.side > 0; spawnEnemy('wallgun', { x: left ? Math.max(caveL(g) + 14, 84) : Math.min(caveR(g) - 14, 276), y: -30, side: left ? 1 : -1, cool: 1.2 }); break; }
+    case 'battery': spawnBattery(ev.f, ev.x); break;
     case 'gate': spawnEnemy('gate', { x: ev.x, y: -30 }); G.gateHint = 4; break;
     case 'boss': spawnBoss(BOSSES[STAGES[G.si].boss]); break;
     case 'cboss': spawnBoss(CAVE_BOSSES[G.si], true); break;
@@ -871,13 +990,20 @@ const POOLS = [
   [['gunship', 3], ['divers', 3], ['swarm', 2], ['cloaker', 2], ['mines', 2], ['risers', 2], ['weavers', 2]],
 ];
 const GROUND = [
-  [['turret', 4], ['tank', 3], ['cache', 1], ['bunker', 1]],
-  [['turret', 3], ['tank', 4], ['cache', 1], ['bunker', 1]],
-  [['turret', 4], ['tank', 1], ['cache', 1], ['bunker', 2]],
-  [['turret', 4], ['tank', 2], ['cache', 1], ['bunker', 2]],
-  [['turret', 4], ['tank', 2], ['cache', 1], ['bunker', 2]],
-  [['turret', 5], ['tank', 2], ['cache', 1], ['bunker', 3]],
+  [['turret', 4], ['tank', 3], ['cache', 1], ['bunker', 1], ['sentry', 2], ['cannon', 1]],
+  [['turret', 3], ['tank', 4], ['cache', 1], ['bunker', 1], ['sentry', 2], ['cannon', 1], ['sweeper', 1]],
+  [['turret', 4], ['tank', 1], ['cache', 1], ['bunker', 2], ['sentry', 2], ['cannon', 1], ['sweeper', 1], ['launcher', 1]],
+  [['turret', 4], ['tank', 2], ['cache', 1], ['bunker', 2], ['sentry', 2], ['cannon', 1], ['sweeper', 1], ['launcher', 2]],
+  [['turret', 4], ['tank', 2], ['cache', 1], ['bunker', 2], ['sentry', 2], ['cannon', 2], ['sweeper', 2], ['launcher', 1]],
+  [['turret', 5], ['tank', 2], ['cache', 1], ['bunker', 3], ['sentry', 2], ['cannon', 2], ['sweeper', 2], ['launcher', 1]],
 ];
+// When the gun batteries are scripted in, single ground units come a little less often to leave room for them.
+const FORT_T = 64;
+function batteryEvents(si, r, from, to, clear) {
+  const ev = [], pool = BATTERY_POOL[si]; let n = Math.floor(r() * pool.length);
+  for (let t = from; t < to; t += 12.5 - si * .5 + r() * 3) if (clear(t)) ev.push({ t, w: 'battery', f: pool[n++ % pool.length], x: 60 + r() * 240 });
+  return ev;
+}
 const pickW = (pool, r) => { const tot = pool.reduce((s, p) => s + p[1], 0); let x = r() * tot; for (const p of pool) if ((x -= p[1]) < 0) return p[0]; return pool[0][0]; };
 const STAGE_T = 92, GATE_T = 44;
 function buildTimeline(si) {
@@ -891,7 +1017,11 @@ function buildTimeline(si) {
   }
   for (const ft of [12, 40, 68]) ev.push({ t: ft + si * .7, w: 'freighter', side: r() < .5 ? -1 : 1 });
   for (let ft = 7; ft < STAGE_T - 6; ft += 16) ev.push({ t: ft, w: 'darters', side: r() < .5 ? -1 : 1 });
-  for (let gt = 4; gt < STAGE_T - 5; gt += 1.9 - si * .1 + r() * .9) if (Math.abs(gt - GATE_T) > 2.5) ev.push({ t: gt, w: pickW(GROUND[si], r), x: 40 + r() * 280 });
+  for (let gt = 4; gt < STAGE_T - 5; gt += 2.5 - si * .1 + r() * .9) if (Math.abs(gt - GATE_T) > 2.5 && Math.abs(gt - FORT_T) > 3) ev.push({ t: gt, w: pickW(GROUND[si], r), x: 40 + r() * 280 });
+  // Gun batteries, and one fortress two thirds of the way through. They keep clear of the gate, the stage encounter (24 s)
+  // and, in the Citadel, the time before the shield generator can be reached.
+  ev.push(...batteryEvents(si, r, si === 5 ? 32 : 9, STAGE_T - 9, t => Math.abs(t - GATE_T) > 4.5 && Math.abs(t - 24) > 4 && Math.abs(t - FORT_T) > 7));
+  ev.push({ t: FORT_T, w: 'battery', f: 'fort', x: 180 });
   ev.push({ t: GATE_T, w: 'gate', x: 110 + r() * 140 });
   ev.push({ t: STAGE_T, w: 'boss' });
   return ev.sort((a, b) => a.t - b.t);
@@ -899,7 +1029,8 @@ function buildTimeline(si) {
 const CAVE_T = 60; // twice the original 30-second route, at the same scroll speed
 function buildCave(si) {
   const r = rng(9000 + si * 31), ev = [];
-  for (let t = 2; t < CAVE_T - 3; t += 2.6 + r()) ev.push({ t, w: 'cturret' });
+  const guns = gunsOn(); let n = 0;
+  for (let t = 2; t < CAVE_T - 3; t += 2.6 + r()) ev.push(guns && n++ % 3 === 1 ? { t, w: 'cwall', side: n % 2 ? 1 : -1 } : { t, w: 'cturret' });
   for (let t = 3; t < CAVE_T - 4; t += 4.5 + r() * 2) ev.push({ t, w: r() < .5 ? 'swarm' : r() < .5 ? 'weavers' : 'divers', x: 100 + r() * 160 });
   [5, 11, 21, 35, 41, 51].forEach(t => ev.push({ t, w: 'cache', x: 120 + r() * 120 }));
   ev.push({ t: 30, w: 'cage', x: 140 + r() * 80 });
@@ -1271,7 +1402,7 @@ function damage(e, dmg) {
   if (e.hp > 0) return;
   e.dead = true; if (e.k !== 'cache') G.kills++; // spawned leaves caches out too
   explode(e.x, e.y, def.big || (def.air ? .8 : 1), !def.air);
-  if (!def.air) G.decals.push({ x: e.x, y: e.y, r: e.r * .9 });
+  if (!def.air) G.decals.push({ x: e.x, y: e.y, r: e.r * .9, smoke: 5, puff: 0 });
   addScore(def.score, e.x, e.y, def.score >= 500);
   if (def.die) def.die(e);
   if (e.k === 'freighter') G.it.push({ k: 'cap', x: e.x, y: e.y, t: 0, r: 12, ci: Math.floor(R() * 4) });
@@ -1448,7 +1579,8 @@ function update(dt) {
   G.fx = G.fx.filter(f => f.t > 0);
   for (const t of G.txt) { t.t -= dt; t.y -= 26 * dt; }
   G.txt = G.txt.filter(t => t.t > 0);
-  for (const d of G.decals) d.y += spd * dt;
+  for (const d of G.decals) { d.y += spd * dt; // wrecked guns smoulder for a few seconds
+    if (d.smoke > 0) { d.smoke -= dt; d.puff -= dt; if (d.puff <= 0 && G.fx.length < 380) { d.puff = .13; const j = Math.sin(G.now * 51 + d.x); G.fx.push({ x: d.x + j * 4, y: d.y, vx: 14 + j * 8, vy: -34, t: .9, max: .9, col: j > 0 ? '#2a2630' : '#4a4450', s: 3.2 + j }); } } }
   G.decals = G.decals.filter(d => d.y < H + 30).slice(-30);
   for (const cl of G.clouds) { cl.y += spd * 1.7 * dt; if (cl.y - cl.r > H) { cl.y = -cl.r - R() * 200; cl.x = R() * W; } }
   if (G.warnUp) { G.warnUp.t -= dt; if (G.warnUp.t <= 0) G.warnUp = null; }
@@ -1966,8 +2098,8 @@ function shipGallery() {
   menu.hidden = true; gameEl.hidden = false; document.body.dataset.screen = 'game'; fit();
   $('pauseBtn').hidden = bombBtn.hidden = true;
   const list = [['darter', 'Darter', 2], ['diver', 'Diver', 2], ['weaver', 'Saucer', 2], ['riser', 'Riser', 2], ['cloaker', 'Cloaker', 2], ['swarm', 'Swarm drone', 2.4],
-    ['mine', 'Mine', 2], ['gunship', 'Gunship', 1.3], ['freighter', 'Freighter', 1.2], ['turret', 'Gun turret', 1.7], ['tank', 'Tank', 1.8], ['bunker', 'Bunker', 1.4], ['cache', 'Crystal cache', 2], ['cage', 'Pilot cell', 1.7], ['gate', 'Dive gate', 1.4]];
-  const es = list.map(([k]) => ({ k, x: 0, y: 0, t: 0, ph: 0, side: 1, flash: 0, alpha: 1, ang: Math.PI / 2, cool: 1, vx: 40, vy: 100 }));
+    ['mine', 'Mine', 2], ['gunship', 'Gunship', 1.3], ['freighter', 'Freighter', 1.2], ['turret', 'Gun turret', 1.7], ['tank', 'Tank', 1.8], ['bunker', 'Bunker', 1.4], ['sentry', 'Sentry gun', 2], ['cannon', 'Heavy cannon', 1.5], ['sweeper', 'Sweep gun', 1.5], ['launcher', 'Launch pad', 1.4], ['wallgun', 'Wall gun', 1.5], ['cache', 'Crystal cache', 2], ['cage', 'Pilot cell', 1.7], ['gate', 'Dive gate', 1.2]];
+  const es = list.map(([k]) => ({ k, x: 0, y: 0, t: 0, ph: 0, side: 1, burst: 0, flash: 0, alpha: 1, ang: Math.PI / 2, cool: 1, vx: 40, vy: 100 }));
   const t0 = performance.now();
   const draw = () => {
     if (gameEl.hidden) return; requestAnimationFrame(draw);
@@ -1975,9 +2107,9 @@ function shipGallery() {
     c.fillStyle = '#0a1024'; c.fillRect(0, 0, W, H);
     text(c, 'THE KESH FLEET', W / 2, 62, 20, '#39d5ff');
     list.forEach(([k, name, sc], i) => {
-      const cx = 62 + (i % 3) * 118, cy = 120 + Math.floor(i / 3) * 108, e = es[i]; e.t = t; e.x = k === 'tank' ? t * 20 : 0;
-      c.save(); c.translate(cx, cy); c.scale(sc, sc); if (k === 'tank') c.translate(-e.x, 0); EK[k].dr(c, e); c.restore();
-      text(c, name, cx, cy + 44, 12, '#eaf0ff');
+      const cx = 48 + (i % 4) * 88, cy = 118 + Math.floor(i / 4) * 106, e = es[i]; e.t = t; e.x = k === 'tank' ? t * 20 : 0; e.y = 0; if (EK[k].up && !EK[k].air && k !== 'gate' && k !== 'tank') { e.cool = 1.5 - t % 1.5; if (k === 'sweeper') e.ang = Math.PI / 2 + Math.sin(t * 1.15) * 1.05; if (k === 'launcher') { e.y = 100; e.cool = 3 - t % 3; e.open = Math.max(0, 1 - (t % 3) * 1.1); } }
+      c.save(); c.translate(cx, cy); c.scale(sc * .85, sc * .85); c.translate(-e.x, -e.y); EK[k].dr(c, e); c.restore();
+      text(c, name, cx, cy + 44, 10, '#eaf0ff');
     });
   };
   draw();
@@ -2122,6 +2254,7 @@ function dailyTimeline(cfg){
   for(let t=2;t<119;t+=3.5){ev.push({t,w:pickW(POOLS[cfg.stage],r),x:60+r()*240,side:r()<.5?-1:1});}
   for(let t=7;t<115;t+=12)ev.push({t,w:'freighter',side:r()<.5?-1:1});
   for(let t=5;t<115;t+=7)ev.push({t,w:'darters',side:r()<.5?-1:1});
+  if(cfg.day>'2026-11-13')ev.push(...batteryEvents(cfg.stage,r,8,112,()=>true));
   return ev.sort((a,b)=>a.t-b.t);
 }
 async function loadDaily(){
