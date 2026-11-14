@@ -1,0 +1,26 @@
+{
+	"appId": "uk.salsbury.squadronbattle",
+	"appName": "Squadron Battle",
+	"webDir": "www",
+	"backgroundColor": "#070b1c",
+	"plugins": {
+		"CapacitorHttp": {
+			"enabled": true
+		},
+		"SocialLogin": {
+			"providers": {
+				"google": true,
+				"apple": true,
+				"facebook": false,
+				"twitter": false
+			}
+		}
+	},
+	"android": {
+		"allowMixedContent": false
+	},
+	"packageClassList": [
+		"AppPlugin",
+		"SocialLoginPlugin"
+	]
+}

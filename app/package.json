@@ -1,0 +1,14 @@
+{
+  "name": "squadron-battle-app",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Squadron Battle Android and iPhone app (Capacitor wrapper around salsbury.uk/squadron-battle)",
+  "dependencies": {
+    "@capacitor/android": "^8.5.3",
+    "@capacitor/app": "^8.1.2",
+    "@capacitor/cli": "^8.5.3",
+    "@capacitor/core": "^8.5.3",
+    "@capacitor/ios": "^8.6.0",
+    "@capgo/capacitor-social-login": "8.5.13"
+  }
+}

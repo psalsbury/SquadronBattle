@@ -1,0 +1,4 @@
+/* Inside the app: no games site to go back to, and no install prompts. */
+.in-app .gh-back, .in-app #installBtn, .in-app #iosInstall { display: none !important; }
+.app-links { margin-top: 10px; display: flex; flex-wrap: wrap; gap: 18px; justify-content: center; }
+.app-links a, .app-links button { color: #9fb1c8; font: inherit; text-decoration: underline; background: none; border: 0; padding: 6px 2px; cursor: pointer; }
