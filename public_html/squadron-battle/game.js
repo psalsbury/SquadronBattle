@@ -1452,7 +1452,7 @@ function startSurface() {
 
 // ---------- Run and stage flow ----------
 function newRun(si, practice) {
-  G.si = si; G.practice = practice; G.score = 0; G.lives = 3; G.bombs = 3; G.livesGiven = 0; G.rescuedRun = 0; G.diff = save.diff; G.continues = 0; G.runStart = Date.now();
+  G.si = si; G.practice = practice; G.score = 0; G.lives = 3; G.bombs = 3; G.livesGiven = 0; G.rescuedRun = 0; G.diff = save.diff; G.continues = 0; G.runStart = Date.now(); G.adUsed = false; G.assisted = false;
   P.wt = 0; P.wl = 1;
   startStage(si);
 }
@@ -1981,21 +1981,21 @@ function stageCleared() {
 function gameOver() { finishRun(false); }
 async function finishRun(won) {
   G.state = won ? 'won' : 'over';
-  const best = G.score > save.best && !G.practice;
+  const best = G.score > save.best && !G.practice && !G.assisted; // a run with an advert ship (app) isn't a fair score
   if (!G.practice) { if (best) save.best = G.score; if (won) save.cleared = true; store(); }
-  const canSave = !G.practice && G.score > 0;
+  const canSave = !G.practice && !G.assisted && G.score > 0;
   const submit = canSave && me ? SUK.api('sq_score', { score: G.score, stage: G.si + 1, diff: G.diff, rescued: G.rescuedRun, won: won ? 1 : 0, secs: Math.round((Date.now() - G.runStart) / 1000) }).then(() => 'Saved to the leaderboard.').catch(e => e.message) : null;
   const cont = !won && !G.practice;
   showOver(`<p class="kicker">${won ? 'The Kesh are beaten' : G.practice ? 'Practice over' : 'Game over'}</p>
     <h2>${won ? 'Veyra is free!' : best ? 'New best!' : 'Squadron lost'}</h2>
     <p class="big">${G.score.toLocaleString()}</p>
     <p>${won ? `You rescued ${G.rescuedRun} of 6 captured pilots.` : `Reached stage ${G.si + 1}: ${esc(STAGES[G.si].name)}. Pilots rescued: ${G.rescuedRun}.`}</p>
-    <p class="saved" id="oSaved">${canSave ? (me ? 'Saving…' : 'Sign in on the home page to put your scores on the leaderboard.') : G.practice ? 'Practice runs don\'t go on the leaderboard.' : ''}</p>
+    <p class="saved" id="oSaved">${canSave ? (me ? 'Saving…' : 'Sign in on the home page to put your scores on the leaderboard.') : G.practice ? 'Practice runs don\'t go on the leaderboard.' : G.assisted ? 'This run used an extra ship, so it doesn\'t go on the leaderboard.' : ''}</p>
     <div class="row">${cont ? `<button class="btn" type="button" id="oCont">Continue here</button>` : ''}<button class="btn" type="button" id="oHome">Home</button><button class="btn primary" type="button" id="oAgain">${G.practice ? 'Try again' : 'Play again'}</button></div>
     ${cont ? '<p class="fine">Continuing starts this stage again with 3 ships, and your score goes back to 0.</p>' : ''}`, won ? 'win' : 'lose');
   $('oHome').onclick = quitToMenu;
   $('oAgain').onclick = () => G.practice ? newRun(G.si, true) : newRun(0, false);
-  if (cont) $('oCont').onclick = () => { const si = G.si; G.score = 0; G.lives = 3; G.bombs = 3; G.livesGiven = 0; G.continues++; P.wl = Math.max(1, P.wl); startStage(si); };
+  if (cont) $('oCont').onclick = () => { const si = G.si; G.score = 0; G.lives = 3; G.bombs = 3; G.livesGiven = 0; G.continues++; G.assisted = false; P.wl = Math.max(1, P.wl); startStage(si); };
   if (submit) { const msg = await submit; const el = $('oSaved'); if (el) el.textContent = msg; loadBoard(); }
 }
 
@@ -2371,6 +2371,126 @@ drawHUD=function(c){originalDrawHUD(c);featureHUD(c);};
 // Keep the original hook useful for deterministic automated play-throughs.
 function featureTestHook(){return {beginTraining,lessonStep,completeTraining,beginDaily,finishDaily,encounter,collect,damage,recordClear,podColour,coreOpen,spawnBoss,stageCleared,gameOver,finishRun,drawItem,drawBoss,dailyTimeline,loadDaily,getDaily:()=>dailyData,radio};}
 
+// ---------- App extras (Android / iPhone only) ----------
+// window.SQApp comes from the app's shim (app src/sq-app.js), loaded before this script. The website has no SQApp,
+// so none of this appears there. In the app:
+//  - Extra ship: once per game, when the last ship is lost, watch a rewarded advert for 1 more ship and carry on from
+//    the same spot (free for full-game owners). The run then doesn't go on the leaderboard or count as a best.
+//    Not offered in practice, daily sorties or flight school.
+//  - Full game (one purchase): stages 1 and 2 are free; stages 3 to 6 need it, in the campaign and in practice.
+//    Daily sorties stay free.
+const APP = window.SQApp || null, FREE_STAGES = 2;
+const fullGame = () => !APP || APP.owned();
+const stageLocked = si => !!APP && si >= FREE_STAGES && !APP.owned();
+const plat = () => window.Capacitor?.getPlatform?.() === 'ios' ? 'Apple ID' : 'Google account';
+if (APP) {
+  const campaign = () => !G.practice && !G.daily && !G.training;
+  // die() cancels a stage clear that was counting down when the last ship goes; keep it in case the extra ship is taken.
+  const baseDie = die;
+  die = function() { const clearT = G.clearT, lives = G.lives; baseDie(); if (lives >= 0 && G.lives < 0) G.heldClear = clearT; };
+  const baseGameOver = gameOver;
+  gameOver = function() {
+    if (!campaign() || G.adUsed) return baseGameOver();
+    G.state = 'offer';
+    const own = fullGame();
+    showOver(`<p class="kicker">Out of ships</p><h2>One more go?</h2><p class="big">${G.score.toLocaleString()}</p>
+      <p>${own ? 'Take 1 extra ship and carry on from right here.' : 'Watch an advert for 1 extra ship and carry on from right here.'}</p>
+      <div class="row"><button class="btn" type="button" id="oNoShip">No thanks</button><button class="btn primary" type="button" id="oAdShip">${own ? 'Extra ship' : '▶ Watch advert'}</button></div>
+      <p class="fine" id="oShipMsg" role="status">One extra ship per game. A run with an extra ship doesn't go on the leaderboard.</p>`, 'lose');
+    $('oNoShip').onclick = () => { G.adUsed = true; baseGameOver(); };
+    $('oAdShip').onclick = async () => {
+      const b = $('oAdShip'), n = $('oNoShip'); b.disabled = n.disabled = true; b.textContent = 'One moment…';
+      let ok = own;
+      if (!own) { try { ok = await APP.rewarded(); } catch (e) { console.warn('advert', e); } }
+      if (G.state !== 'offer') return;
+      if (!ok) { b.disabled = n.disabled = false; b.textContent = '▶ Try again'; $('oShipMsg').textContent = APP.whyNot() || 'The advert didn\'t finish, so no extra ship this time.'; return; }
+      G.adUsed = true; G.assisted = true; G.lives = 0; G.overT = 0;
+      if (G.heldClear > 0) G.clearT = G.heldClear; G.heldClear = 0;
+      P.respawn = .4; G.banner = { text: 'EXTRA SHIP', sub: 'Last chance, pilot', t: 1.8 };
+      hideOver(); G.state = 'play'; last = performance.now(); acc = 0;
+    };
+  };
+  // Clearing stage 2 without the full game: the next-stage button opens the full-game offer instead.
+  const baseCleared = stageCleared;
+  stageCleared = function() {
+    baseCleared();
+    const si = G.si, next = $('oNext');
+    if (!next || !stageLocked(si + 1)) return;
+    next.textContent = `🔒 Stage ${si + 2}: ${STAGES[si + 1].name}`;
+    next.onclick = () => lockScreen(si + 1);
+  };
+  function lockScreen(si) {
+    const price = APP.price() || '';
+    G.state = 'clear';
+    showOver(`<p class="kicker">Free stages complete</p><h2>Carry on to stage ${si + 1}?</h2>
+      <p>Stages 3 to 6 are in the full game: ${STAGES.slice(FREE_STAGES).map(s => esc(s.name)).join(', ')}. Four more bosses and four more captured pilots to rescue.</p>
+      <p>One payment, yours on this ${plat()} for good. It also gives you the extra ship without an advert.</p>
+      <div class="row"><button class="btn primary" type="button" id="oBuy">Get the full game${price ? ' · ' + esc(price) : ''}</button></div>
+      <div class="row"><button class="btn" type="button" id="oRestore">Restore purchase</button><button class="btn" type="button" id="oEnd">End run</button></div>
+      <p class="fine" id="oBuyMsg" role="status">Your score so far: ${G.score.toLocaleString()}. Ending the run saves it.</p>`, 'win');
+    const btns = ['oBuy', 'oRestore', 'oEnd'].map($), msg = $('oBuyMsg');
+    const busy = async (b, fn) => { const label = b.textContent; btns.forEach(x => { x.disabled = true; }); b.textContent = 'One moment…';
+      try { return await fn(); } finally { btns.forEach(x => { x.disabled = false; }); b.textContent = label; } };
+    $('oBuy').onclick = () => busy($('oBuy'), async () => {
+      const r = await APP.buy().catch(e => ({ ok: false, msg: e.message }));
+      if (r.ok) startStage(si); else msg.textContent = r.msg || '';
+    });
+    $('oRestore').onclick = () => busy($('oRestore'), async () => {
+      if (await APP.restore().catch(() => false)) startStage(si); else msg.textContent = `No full game purchase found on this ${plat()}.`;
+    });
+    $('oEnd').onclick = () => { G.demoEnd = true; finishRun(false); };
+  }
+  const baseFinish = finishRun;
+  finishRun = async function(won) {
+    const demo = G.demoEnd; G.demoEnd = false;
+    const pending = baseFinish(won);
+    if (demo) { const k = over.querySelector('.kicker'); if (k) k.textContent = 'End of the free stages'; const c = $('oCont'); if (c) c.remove(); over.querySelector('.fine')?.remove(); }
+    return pending;
+  };
+  // Home page: lock badges on stages 3 to 6, and a Full game button and sheet.
+  const baseMenu = renderMenu;
+  renderMenu = function() {
+    baseMenu();
+    document.querySelectorAll('#stageCards .stage-card').forEach(b => {
+      const i = +b.dataset.stage; if (!stageLocked(i)) return;
+      b.disabled = false; b.classList.add('sc-full');
+      b.querySelector('.sc-meta').textContent = '★ Full game';
+      if (i > save.reached) b.querySelector('.sc-blurb').textContent = 'In the full game.';
+      b.querySelector('.sc-lock')?.remove(); b.insertAdjacentHTML('afterbegin', '<span class="sc-lock">★ Full game</span>');
+      b.onclick = openFull;
+    });
+    syncFull();
+  };
+  document.body.insertAdjacentHTML('beforeend', `<div class="gh-modal" id="ghFull" hidden><div class="gh-sheet" role="dialog" aria-modal="true" aria-labelledby="ghFullT">
+  <div class="gh-sheet-head"><h2 id="ghFullT">Full game</h2><button class="gh-icon" type="button" data-close aria-label="Close">✕</button></div>
+  <p>Stages 1 and 2 and the daily sortie are free. One payment and the rest is yours on this ${plat()} for good:</p>
+  <ul><li>Stages 3 to 6: ${STAGES.slice(FREE_STAGES).map(s => esc(s.name)).join(', ')}</li><li>Four more bosses and the Kesh Citadel</li><li>Practise any stage</li><li>Your extra ship without an advert</li></ul>
+  <p class="saved" id="fullOwned" hidden>You have the full game. Thanks for flying with us!</p>
+  <div class="row"><button class="btn primary" id="fullBuy" type="button">Get the full game</button></div>
+  <div class="row"><button class="btn" id="fullRestore" type="button">Restore purchase</button></div>
+  <p class="fine" id="fullMsg" role="status"></p>
+</div></div>`);
+  document.querySelector('.gh-actions').insertAdjacentHTML('beforeend', '<button class="gh-btn wide" id="fullBtn" type="button">★ Full game</button>');
+  function openFull() { $('fullMsg').textContent = ''; syncFull(); GH.open('ghFull'); }
+  function syncFull() {
+    const own = APP.owned(), price = APP.price() || '';
+    $('fullBtn').hidden = own; $('fullBuy').hidden = own; $('fullOwned').hidden = !own;
+    $('fullBuy').textContent = `Get the full game${price ? ' · ' + price : ''}`;
+  }
+  $('fullBtn').onclick = openFull;
+  const fBusy = async (b, fn) => { const all = [$('fullBuy'), $('fullRestore')], label = b.textContent; all.forEach(x => { x.disabled = true; }); b.textContent = 'One moment…';
+    try { return await fn(); } finally { all.forEach(x => { x.disabled = false; }); b.textContent = label; syncFull(); } };
+  $('fullBuy').onclick = () => fBusy($('fullBuy'), async () => {
+    const r = await APP.buy().catch(e => ({ ok: false, msg: e.message }));
+    $('fullMsg').textContent = r.ok ? 'Done! Stages 3 to 6 are open.' : (r.msg || '');
+  });
+  $('fullRestore').onclick = () => fBusy($('fullRestore'), async () => {
+    const ok = await APP.restore().catch(() => false);
+    $('fullMsg').textContent = ok ? 'Found it: the full game is back.' : `No full game purchase found on this ${plat()}.`;
+  });
+  APP.onChange(() => { if (!menu.hidden) renderMenu(); else syncFull(); });
+}
+
 // ---------- Start up ----------
 async function init() {
   if (snd) snd.bindMute(document.querySelectorAll('[data-mute]'), () => { syncMusic(); if (!menu.hidden) renderMenu(); });
@@ -2397,6 +2517,6 @@ async function init() {
 init();
 
 // Test hook (used by the automated play-through).
-window.__sq = { G, P, save, play, update, render, useBomb, startStage, BOSSES, STAGES, EK, quitToMenu, pause, resume, features: featureTestHook(), setInv(v) { P.inv = v; } };
+window.__sq = { G, P, save, play, update, render, useBomb, startStage, BOSSES, STAGES, EK, quitToMenu, pause, resume, features: featureTestHook(), die() { die(); }, setInv(v) { P.inv = v; } };
 })();
 

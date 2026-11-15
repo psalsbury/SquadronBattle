@@ -4,11 +4,13 @@
   "private": true,
   "description": "Squadron Battle Android and iPhone app (Capacitor wrapper around salsbury.uk/squadron-battle)",
   "dependencies": {
+    "@capacitor-community/admob": "^8.3.0",
     "@capacitor/android": "^8.5.3",
     "@capacitor/app": "^8.1.2",
     "@capacitor/cli": "^8.5.3",
     "@capacitor/core": "^8.5.3",
     "@capacitor/ios": "^8.6.0",
-    "@capgo/capacitor-social-login": "8.5.13"
+    "@capgo/capacitor-social-login": "8.5.13",
+    "@capgo/native-purchases": "^8.9.6"
   }
 }

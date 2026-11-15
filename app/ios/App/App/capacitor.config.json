@@ -20,7 +20,9 @@
 		"allowMixedContent": false
 	},
 	"packageClassList": [
+		"AdMobPlugin",
 		"AppPlugin",
-		"SocialLoginPlugin"
+		"SocialLoginPlugin",
+		"NativePurchasesPlugin"
 	]
 }

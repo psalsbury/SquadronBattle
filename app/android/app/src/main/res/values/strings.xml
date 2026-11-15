@@ -4,4 +4,6 @@
     <string name="title_activity_main">Squadron Battle</string>
     <string name="package_name">uk.salsbury.squadronbattle</string>
     <string name="custom_url_scheme">uk.salsbury.squadronbattle</string>
+    <!-- AdMob app ID of the "Squadron Battle" AdMob app. Google's sample ID (test adverts) until Pete creates it. -->
+    <string name="admob_app_id">ca-app-pub-3940256099942544~3347511713</string>
 </resources>
