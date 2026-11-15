@@ -14,12 +14,12 @@ cd "$(dirname "$0")"
 IOS_GOOGLE_CLIENT_ID=''
 # Real AdMob rewarded units for the "Squadron Battle" AdMob apps (Android and iOS). Empty until Pete creates them.
 REAL_REWARDED=''
-IOS_REAL_REWARDED=''
+IOS_REAL_REWARDED='ca-app-pub-9848402473053111/4628759038' # 'Squadron iPhone extra ship'
 PRODUCT_ID='full_game' # Play Console > Monetise > In-app products and App Store Connect: one-off product with this ID
 IOS_TEST_RW='ca-app-pub-3940256099942544/1712485313'
 if [ "${REAL_ADS:-}" = 1 ]; then
-  [ -n "$REAL_REWARDED" ] || { echo 'build-www: set REAL_REWARDED first' >&2; exit 1; }
-  RW=$REAL_REWARDED; TESTING=false
+  if [ -n "$REAL_REWARDED" ]; then RW=$REAL_REWARDED; TESTING=false
+  else echo 'build-www: no Android advert unit yet, so the Android build uses test adverts (do not release it)' >&2; RW='ca-app-pub-3940256099942544/5224354917'; TESTING=true; fi
   if [ -n "$IOS_REAL_REWARDED" ]; then IRW=$IOS_REAL_REWARDED; ITESTING=false
   else echo 'build-www: no iPhone advert unit yet, so the iPhone build uses test adverts' >&2; IRW=$IOS_TEST_RW; ITESTING=true; fi
 else RW='ca-app-pub-3940256099942544/5224354917'; TESTING=true; IRW=$IOS_TEST_RW; ITESTING=true; fi

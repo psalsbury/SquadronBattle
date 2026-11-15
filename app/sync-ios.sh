@@ -6,7 +6,7 @@ set -euo pipefail
 cd "$(dirname "$0")"
 export PATH=/opt/node/bin:$PATH
 NAME='Squadron Battle'; BUNDLE='uk.salsbury.squadronbattle'; BG='#070B1C'
-IOS_ADMOB_APP_ID=''   # AdMob > Apps > Squadron Battle iOS app ID (ca-app-pub-...~...). Empty = Google's test adverts
+IOS_ADMOB_APP_ID='ca-app-pub-9848402473053111~4445906145'   # AdMob > Apps > Squadron Battle iOS app ID (ca-app-pub-...~...). Empty = Google's test adverts
 IOS_GOOGLE_CLIENT_ID=''  # Google Cloud > Credentials > iOS client for $BUNDLE (same value as in build-www.sh). Empty = Sign in with Apple only
 VERSION=$(grep -o 'versionName "[^"]*"' android/app/build.gradle | cut -d'"' -f2) # same version as the Android app
 TRACKING='Squadron Battle shows a short advert when you choose one for an extra ship. Allowing tracking lets Google pick adverts that suit you; saying no still lets you play.'
