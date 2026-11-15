@@ -2419,6 +2419,12 @@ if (APP) {
     next.textContent = `🔒 Stage ${si + 2}: ${STAGES[si + 1].name}`;
     next.onclick = () => lockScreen(si + 1);
   };
+  const baseCleared2 = stageCleared;
+  stageCleared = function() {
+    baseCleared2();
+    const si = G.si, next = $('oNext');
+    if (next && G.state === 'clear' && !stageLocked(si + 1) && campaign()) afterAd(next, () => startStage(si + 1));
+  };
   function lockScreen(si) {
     const price = APP.price() || '';
     G.state = 'clear';
@@ -2440,10 +2446,27 @@ if (APP) {
     });
     $('oEnd').onclick = () => { G.demoEnd = true; finishRun(false); };
   }
+  // Adverts between games (free players only, never in the middle of play): after stage 1, when a run ends and you
+  // choose Play again, and after a daily sortie. At most one every 3 minutes, and never while a purchase is offered.
+  let lastBreakAt = 0, breakBusy = false;
+  const adBreak = async () => {
+    if (breakBusy || !APP.interstitial || APP.owned() || Date.now() - lastBreakAt < 180000) return;
+    breakBusy = true;
+    try { if (await APP.interstitial()) lastBreakAt = Date.now(); } catch (e) { console.warn('advert', e); }
+    breakBusy = false;
+  };
+  const afterAd = (btn, fn) => { if (btn) btn.onclick = async () => { btn.disabled = true; await adBreak(); btn.disabled = false; fn(); }; };
+  const baseFinishDaily = finishDaily;
+  finishDaily = async function(survived) {
+    const pending = baseFinishDaily(survived);
+    afterAd($('dailyAgain'), beginDaily);
+    return pending;
+  };
   const baseFinish = finishRun;
   finishRun = async function(won) {
     const demo = G.demoEnd; G.demoEnd = false;
     const pending = baseFinish(won);
+    if (!G.practice && !demo) afterAd($('oAgain'), () => newRun(0, false));
     if (demo) { const k = over.querySelector('.kicker'); if (k) k.textContent = 'End of the free stages'; const c = $('oCont'); if (c) c.remove(); over.querySelector('.fine')?.remove(); }
     return pending;
   };

@@ -142,6 +142,14 @@
       .finally(() => { rLoading = null; });
   }
 
+  let iLoaded = false, iLoading = null, setUp = false; // setUp: consent (and on iPhone the tracking question) done
+  function loadInterstitial() {
+    if (!setUp || owned || iLoaded || iLoading || !CFG.interstitialId) return;
+    iLoading = AdMob.prepareInterstitial({ adId: CFG.interstitialId, isTesting: CFG.testing })
+      .then(() => { iLoaded = true; }, e => console.warn('interstitial load', e))
+      .finally(() => { iLoading = null; });
+  }
+
   const ready = (async () => {
     try {
       await AdMob.initialize({ initializeForTesting: CFG.testing });
@@ -159,12 +167,13 @@
         choicesFn = async () => {
           try { await AdMob.showPrivacyOptionsForm(); canAds = (await AdMob.requestConsentInfo()).canRequestAds !== false; }
           catch (e) { console.warn('privacy options', e); }
-          if (canAds) loadRewarded();
+          if (canAds) { loadRewarded(); loadInterstitial(); }
         };
         showChoices();
       }
     } catch (e) { console.warn('AdMob setup', e); }
-    if (canAds) loadRewarded();
+    setUp = true;
+    if (canAds) { loadRewarded(); loadInterstitial(); }
   })();
 
   window.SQApp = {
@@ -194,6 +203,23 @@
       return checkPurchases();
     },
 
+    // Between games. Never waits for one to load: if none is ready the game just carries on (and one loads for next
+    // time). Resolves true if an advert was shown. No advert unit set = never.
+    async interstitial() {
+      if (owned || !canAds || !CFG.interstitialId) return false;
+      if ((await within(ready.then(() => true), 1500)) === false) return false;
+      if (!iLoaded) { loadInterstitial(); return false; }
+      iLoaded = false;
+      let finish;
+      const done = new Promise(r => { finish = r; });
+      const subs = [listen('interstitialAdDismissed', () => finish(true)), listen('interstitialAdFailedToShow', () => finish(false))];
+      await Promise.all(subs);
+      AdMob.showInterstitial().catch(() => finish(false));
+      const shown = await within(done, 90000); // a stuck advert never blocks the game for good
+      unlisten(subs);
+      loadInterstitial();
+      return !!shown;
+    },
     available: () => canAds,
     whyNot: () => why,
     // Resolves true only if the player watched to the reward. showRewardVideoAd() resolves only when the reward is

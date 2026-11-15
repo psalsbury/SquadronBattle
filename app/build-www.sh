@@ -15,7 +15,7 @@ IOS_GOOGLE_CLIENT_ID=''
 # Real AdMob rewarded units for the "Squadron Battle" AdMob apps (Android and iOS). Empty until Pete creates them.
 REAL_REWARDED='ca-app-pub-9848402473053111/4501921470' # 'Squadron Android extra ship'
 REAL_INTERSTITIAL=''     # AdMob Android interstitial unit 'Squadron between games' (empty = no adverts between games)
-IOS_REAL_INTERSTITIAL='' # AdMob iOS interstitial unit
+IOS_REAL_INTERSTITIAL='ca-app-pub-9848402473053111/6417463364' # 'Squadron iPhone between games'
 IOS_REAL_REWARDED='ca-app-pub-9848402473053111/4628759038' # 'Squadron iPhone extra ship'
 PRODUCT_ID='full_game' # Play Console > Monetise > In-app products and App Store Connect: one-off product with this ID
 IOS_TEST_RW='ca-app-pub-3940256099942544/1712485313'
