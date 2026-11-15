@@ -2400,13 +2400,18 @@ if (APP) {
     $('oNoShip').onclick = () => { G.adUsed = true; baseGameOver(); };
     $('oAdShip').onclick = async () => {
       const b = $('oAdShip'), n = $('oNoShip'); b.disabled = n.disabled = true; b.textContent = 'One moment…';
-      let ok = own;
-      if (!own) { try { ok = await APP.rewarded(); } catch (e) { console.warn('advert', e); } }
+      let ok = own, free = false;
+      $('oShipMsg').textContent = '';
+      if (!own) {
+        try { ok = await APP.rewarded(); } catch (e) { console.warn('advert', e); }
+        // No advert could be loaded or shown (not the player closing one early): the extra ship is on us.
+        if (!ok && !(APP.closedEarly && APP.closedEarly())) { ok = true; free = true; }
+      }
       if (G.state !== 'offer') return;
       if (!ok) { b.disabled = n.disabled = false; b.textContent = '▶ Try again'; $('oShipMsg').textContent = APP.whyNot() || 'The advert didn\'t finish, so no extra ship this time.'; return; }
       G.adUsed = true; G.assisted = true; G.lives = 0; G.overT = 0;
       if (G.heldClear > 0) G.clearT = G.heldClear; G.heldClear = 0;
-      P.respawn = .4; G.banner = { text: 'EXTRA SHIP', sub: 'Last chance, pilot', t: 1.8 };
+      P.respawn = .4; G.banner = { text: 'EXTRA SHIP', sub: free ? 'No advert ready, so this one is on us' : 'Last chance, pilot', t: 2.2 };
       hideOver(); G.state = 'play'; last = performance.now(); acc = 0;
     };
   };

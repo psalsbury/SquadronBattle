@@ -134,7 +134,7 @@
   const listen = (ev, fn) => AdMob.addListener(ev, fn);
   const unlisten = subs => subs.forEach(p => Promise.resolve(p).then(h => h.remove()).catch(() => {}));
 
-  let rLoaded = false, rLoading = null;
+  let rLoaded = false, rLoading = null, lastEarly = false;
   function loadRewarded() {
     if (rLoaded) return Promise.resolve(true);
     return rLoading ||= AdMob.prepareRewardVideoAd({ adId: CFG.rewardedId, isTesting: CFG.testing })
@@ -222,15 +222,16 @@
     },
     available: () => canAds,
     whyNot: () => why,
+    closedEarly: () => lastEarly, // true if the last advert was shown but closed before the reward
     // Resolves true only if the player watched to the reward. showRewardVideoAd() resolves only when the reward is
     // earned, and some networks send the reward just after the advert closes, so: count the reward whenever it
     // arrives, and finish once the advert has closed plus a short grace period, or straight away if it couldn't show.
     async rewarded() {
-      why = '';
+      why = ''; lastEarly = false;
       if ((await within(ready.then(() => true), 20000, 'Adverts are still starting up. Try again in a moment.')) === false) return false;
       why = '';
       if (!canAds) { why = 'Adverts are switched off by your privacy choices.'; return false; }
-      if (!(await within(loadRewarded(), 20000, 'The advert is taking too long to load. Check your connection and try again.'))) return false;
+      if (!(await within(loadRewarded(), 12000, 'The advert is taking too long to load. Check your connection and try again.'))) return false;
       let earned = false, closed = false, finish;
       const done = new Promise(r => { finish = r; });
       const subs = [
@@ -245,7 +246,7 @@
       await done;
       unlisten(subs);
       loadRewarded();
-      if (!earned && !why) why = 'The advert closed before the end. Watch it to the end for the reward.';
+      if (!earned && !why) { why = 'The advert closed before the end. Watch it to the end for the reward.'; lastEarly = true; }
       return earned;
     }
   };
