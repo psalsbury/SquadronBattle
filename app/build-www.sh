@@ -17,6 +17,7 @@ REAL_REWARDED='ca-app-pub-9848402473053111/4501921470' # 'Squadron Android extra
 REAL_INTERSTITIAL='ca-app-pub-9848402473053111/6680207304' # 'Squadron Android between games'
 IOS_REAL_INTERSTITIAL='ca-app-pub-9848402473053111/6417463364' # 'Squadron iPhone between games'
 IOS_REAL_REWARDED='ca-app-pub-9848402473053111/4628759038' # 'Squadron iPhone extra ship'
+IOS_PRODUCT_ID='squadron_full_game' # App Store Connect product IDs are unique per developer account and Gangster Graham already has full_game
 PRODUCT_ID='full_game' # Play Console > Monetise > In-app products and App Store Connect: one-off product with this ID
 IOS_TEST_RW='ca-app-pub-3940256099942544/1712485313'
 if [ "${REAL_ADS:-}" = 1 ]; then
@@ -33,9 +34,9 @@ cp -r "$SITE"/squadron-battle/lib www/squadron-battle/ # the game's own copies o
 cp src/sq-app.js src/sq-app.css www/squadron-battle/
 cp -r src/splash www/splash && rm -f www/splash/render-sprites.mjs www/splash/sprites.json # the Salsbury games intro
 
-python3 - "$IOS_GOOGLE_CLIENT_ID" "$RW" "$TESTING" "$PRODUCT_ID" "$IRW" "$ITESTING" "$IN" "$IIN" <<'PY'
+python3 - "$IOS_GOOGLE_CLIENT_ID" "$RW" "$TESTING" "$PRODUCT_ID" "$IRW" "$ITESTING" "$IN" "$IIN" "$IOS_PRODUCT_ID" <<'PY'
 import sys
-igid, rw, testing, product, irw, itesting, inter, iin = sys.argv[1:]
+igid, rw, testing, product, irw, itesting, inter, iin, iproduct = sys.argv[1:]
 def patch(path, subs):
     s = open(path).read()
     for old, new in subs:
@@ -50,7 +51,7 @@ patch('www/squadron-battle/index.html', [
     ('<script src="/squadron-battle/lib/auth.js',
      '<link rel="stylesheet" href="/squadron-battle/sq-app.css">\n'
      f'<script>window.SQ_APP_CONFIG = {{ rewardedId: "{rw}", interstitialId: "{inter}", testing: {testing}, productId: "{product}", '
-     f'ios: {{ rewardedId: "{irw}", interstitialId: "{iin}", testing: {itesting}, googleClientId: "{igid}" }} }};</script>\n'
+     f'ios: {{ productId: "{iproduct}", rewardedId: "{irw}", interstitialId: "{iin}", testing: {itesting}, googleClientId: "{igid}" }} }};</script>\n'
      '<script>window.SUK_API = "https://salsbury.uk/api/index.php";</script>\n'
      '<script src="/squadron-battle/sq-app.js"></script>\n<script src="/squadron-battle/lib/auth.js'),
     # the Salsbury games intro (src/splash): covers the page from the first paint, once per app start
