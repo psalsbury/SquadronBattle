@@ -14,15 +14,18 @@ cd "$(dirname "$0")"
 IOS_GOOGLE_CLIENT_ID=''
 # Real AdMob rewarded units for the "Squadron Battle" AdMob apps (Android and iOS). Empty until Pete creates them.
 REAL_REWARDED='ca-app-pub-9848402473053111/4501921470' # 'Squadron Android extra ship'
+REAL_INTERSTITIAL=''     # AdMob Android interstitial unit 'Squadron between games' (empty = no adverts between games)
+IOS_REAL_INTERSTITIAL='' # AdMob iOS interstitial unit
 IOS_REAL_REWARDED='ca-app-pub-9848402473053111/4628759038' # 'Squadron iPhone extra ship'
 PRODUCT_ID='full_game' # Play Console > Monetise > In-app products and App Store Connect: one-off product with this ID
 IOS_TEST_RW='ca-app-pub-3940256099942544/1712485313'
 if [ "${REAL_ADS:-}" = 1 ]; then
+  IN=$REAL_INTERSTITIAL; IIN=$IOS_REAL_INTERSTITIAL
   if [ -n "$REAL_REWARDED" ]; then RW=$REAL_REWARDED; TESTING=false
   else echo 'build-www: no Android advert unit yet, so the Android build uses test adverts (do not release it)' >&2; RW='ca-app-pub-3940256099942544/5224354917'; TESTING=true; fi
   if [ -n "$IOS_REAL_REWARDED" ]; then IRW=$IOS_REAL_REWARDED; ITESTING=false
   else echo 'build-www: no iPhone advert unit yet, so the iPhone build uses test adverts' >&2; IRW=$IOS_TEST_RW; ITESTING=true; fi
-else RW='ca-app-pub-3940256099942544/5224354917'; TESTING=true; IRW=$IOS_TEST_RW; ITESTING=true; fi
+else IN='ca-app-pub-3940256099942544/1033173712'; IIN='ca-app-pub-3940256099942544/4411468910'; RW='ca-app-pub-3940256099942544/5224354917'; TESTING=true; IRW=$IOS_TEST_RW; ITESTING=true; fi
 
 rm -rf www && mkdir -p www/squadron-battle
 cp "$SITE"/squadron-battle/{index.html,game.js,icon-192.png,icon-512.png} www/squadron-battle/
@@ -30,9 +33,9 @@ cp -r "$SITE"/squadron-battle/lib www/squadron-battle/ # the game's own copies o
 cp src/sq-app.js src/sq-app.css www/squadron-battle/
 cp -r src/splash www/splash && rm -f www/splash/render-sprites.mjs www/splash/sprites.json # the Salsbury games intro
 
-python3 - "$IOS_GOOGLE_CLIENT_ID" "$RW" "$TESTING" "$PRODUCT_ID" "$IRW" "$ITESTING" <<'PY'
+python3 - "$IOS_GOOGLE_CLIENT_ID" "$RW" "$TESTING" "$PRODUCT_ID" "$IRW" "$ITESTING" "$IN" "$IIN" <<'PY'
 import sys
-igid, rw, testing, product, irw, itesting = sys.argv[1:]
+igid, rw, testing, product, irw, itesting, inter, iin = sys.argv[1:]
 def patch(path, subs):
     s = open(path).read()
     for old, new in subs:
@@ -46,8 +49,8 @@ patch('www/squadron-battle/index.html', [
     ('<script src="/assets/play-gate.js?v=1" defer></script>\n', ''), # website-only invitation gate (apps are open)
     ('<script src="/squadron-battle/lib/auth.js',
      '<link rel="stylesheet" href="/squadron-battle/sq-app.css">\n'
-     f'<script>window.SQ_APP_CONFIG = {{ rewardedId: "{rw}", testing: {testing}, productId: "{product}", '
-     f'ios: {{ rewardedId: "{irw}", testing: {itesting}, googleClientId: "{igid}" }} }};</script>\n'
+     f'<script>window.SQ_APP_CONFIG = {{ rewardedId: "{rw}", interstitialId: "{inter}", testing: {testing}, productId: "{product}", '
+     f'ios: {{ rewardedId: "{irw}", interstitialId: "{iin}", testing: {itesting}, googleClientId: "{igid}" }} }};</script>\n'
      '<script>window.SUK_API = "https://salsbury.uk/api/index.php";</script>\n'
      '<script src="/squadron-battle/sq-app.js"></script>\n<script src="/squadron-battle/lib/auth.js'),
     # the Salsbury games intro (src/splash): covers the page from the first paint, once per app start
