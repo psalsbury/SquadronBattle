@@ -1508,10 +1508,7 @@ function update(dt) {
     if (!Number.isFinite(P.tx) || !Number.isFinite(P.ty)) { P.tx = P.x; P.ty = P.y; }
     P.tx = clamp(P.tx, lo, hi); P.ty = clamp(P.ty, 60, H - 26);
     const ox = P.x;
-    if (save.follow === 'amiga' && save.ctrl === 'drag' && !(kx || ky)) { // the ship chases the finger at its own top speed
-      const dx = P.tx - P.x, dy = P.ty - P.y, m = Math.hypot(dx, dy), max = 300 * dt;
-      if (m > max) { P.x += dx / m * max; P.y += dy / m * max; } else { P.x = P.tx; P.y = P.ty; }
-    } else { P.x = P.tx; P.y = P.ty; }
+    P.x = P.tx; P.y = P.ty;
     P.x = clamp(P.x, lo, hi);
     P.vx = (P.x - ox) / dt; P.bank += (clamp(P.vx / 260, -1, 1) - P.bank) * Math.min(1, dt * 10);
     P.inv = Math.max(0, P.inv - dt);
@@ -1946,8 +1943,7 @@ function controlsHtml() {
   const seg = (name, val, opts) => `<div class="seg" role="radiogroup" data-set="${name}">${opts.map(([v, l]) => `<button type="button" role="radio" aria-checked="${String(val) === String(v)}" data-v="${v}">${l}</button>`).join('')}</div>`;
   return `${snd ? `<div class="setrow"><span>Sound</span>${seg('sound', snd.muted ? 'off' : 'on', [['on', 'On'], ['off', 'Off']])}</div>` : ''}
     <div class="setrow"><span>Controls</span>${seg('ctrl', save.ctrl, [['drag', 'Drag'], ['pad', 'Joypad']])}</div>
-    <div class="setrow" ${save.ctrl === 'pad' ? 'hidden' : ''}><span>Drag speed</span>${seg('sens', save.sens, [[1, '1×'], [2, '2×']])}</div>
-    <div class="setrow" ${save.ctrl === 'pad' ? 'hidden' : ''}><span>Ship</span>${seg('follow', save.follow, [['keep', 'Keeps up'], ['amiga', 'Amiga speed']])}</div>`;
+    <div class="setrow" ${save.ctrl === 'pad' ? 'hidden' : ''}><span>Drag speed</span>${seg('sens', save.sens, [[1, '1×'], [2, '2×']])}</div>`;
 }
 function bindSegs(root, after) {
   root.querySelectorAll('[data-set]').forEach(g => g.querySelectorAll('button').forEach(b => b.onclick = () => {
@@ -2043,7 +2039,7 @@ function renderMenu() {
   st.innerHTML = `<div class="setrow"><span>Difficulty</span><div class="seg" data-set="diff">${DIFF.map((d, i) => `<button type="button" role="radio" aria-checked="${save.diff === i}" data-v="${i}">${d.name}</button>`).join('')}</div></div>
     <p class="fine">${['Cadet: slower, fewer bullets. Scores count half.', 'Pilot: the game as it was meant to be played.', 'Ace: faster bullets and more of them. Scores count one and a half times.'][save.diff]}</p>${controlsHtml()}
     <div class="setrow"><span>Title music</span><div class="seg" role="radiogroup" data-set="music">${[['on', 'On'], ['off', 'Off']].map(([v, l]) => `<button type="button" role="radio" aria-checked="${save.music === v}" data-v="${v}">${l}</button>`).join('')}</div></div>
-    <p class="fine">${save.ctrl === 'pad' ? 'Joypad: touch anywhere and push your thumb the way you want to fly.' : `Drag anywhere on the screen: the ship moves ${save.sens === 2 ? 'twice as far as' : 'exactly as far as'} your finger, so your finger never hides it. ${save.follow === 'amiga' ? 'Amiga speed: the ship has a top speed, like the original.' : ''}`}</p>`;
+    <p class="fine">${save.ctrl === 'pad' ? 'Joypad: touch anywhere and push your thumb the way you want to fly.' : `Drag anywhere on the screen: the ship moves ${save.sens === 2 ? 'twice as far as' : 'exactly as far as'} your finger, so your finger never hides it.`}</p>`;
   bindSegs(st, renderMenu);
   syncMusic();
 }
