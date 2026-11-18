@@ -64,6 +64,15 @@ patch('www/squadron-battle/index.html', [
 ])
 patch('www/squadron-battle/game.js', [
     ("sw: '/squadron-battle/sw.js', ", ''),
+    ('<div class="row"><button class="btn" id="fullRestore" type="button">Restore purchase</button></div>' + '\n',
+     '<div class="row"><button class="btn" id="fullRestore" type="button">Restore purchase</button></div>' + '\n'
+     '  <div class="row" id="fullCodeRow"><button class="btn" id="fullCodeBtn" type="button">Have a code?</button></div>\n'
+     '  <div class="row" id="fullCodeBox" hidden><input id="fullCode" type="text" autocomplete="off" autocapitalize="characters" spellcheck="false" placeholder="Enter code" aria-label="Code" style="flex:1;min-width:0;padding:.6em;font:inherit;text-transform:uppercase"><button class="btn primary" id="fullCodeGo" type="button">Unlock</button></div>\n'),
+    ("    $('fullBtn').hidden = own; $('fullBuy').hidden = own;", "    $('fullBtn').hidden = own; $('fullBuy').hidden = own; $('fullCodeRow').hidden = own || !$('fullCodeBox').hidden; if (own) $('fullCodeBox').hidden = true;"),
+    ("  APP.onChange(() => { if (!menu.hidden) renderMenu(); else syncFull(); });\n}",
+     "  $('fullCodeBtn').onclick = () => { $('fullCodeBox').hidden = false; $('fullCodeRow').hidden = true; $('fullCode').focus(); };\n"
+     "  $('fullCodeGo').onclick = async () => { const ok = await APP.redeem($('fullCode').value); $('fullMsg').textContent = ok ? 'Code accepted. Stages 3 to 6 are open.' : 'Code not recognised.'; if (ok) $('fullCode').value = ''; syncFull(); };\n"
+     "  APP.onChange(() => { if (!menu.hidden) renderMenu(); else syncFull(); });\n}"),
 ])
 PY
 # The game is the app's start page. Capacitor serves www/index.html for every path without a file extension.

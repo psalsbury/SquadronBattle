@@ -93,6 +93,9 @@
   // takes it away again). Bought on one phone, it comes back on another with Restore purchase.
   const OWN_KEY = 'sq-full-game';
   let owned = localStorage.getItem(OWN_KEY) === '1', price = '';
+  // Reviewer unlock: Google Play / App Store reviewers cannot pay, so a secret code (only its SHA-256 is in the app, the code itself is in the store review notes) opens the full game on that device.
+  const REV_KEY = 'sq-review-unlock', REV_HASH = '7fe4a07a23cb81ed5195e54ac27bae75b7234d2b0fe6e36da02f3cb7c3810540';
+  let rev = localStorage.getItem(REV_KEY) === '1';
   const listeners = [];
   function setOwned(v) {
     if (v === owned) return;
@@ -144,7 +147,7 @@
 
   let iLoaded = false, iLoading = null, setUp = false; // setUp: consent (and on iPhone the tracking question) done
   function loadInterstitial() {
-    if (!setUp || owned || iLoaded || iLoading || !CFG.interstitialId) return;
+    if (!setUp || owned || rev || iLoaded || iLoading || !CFG.interstitialId) return;
     iLoading = AdMob.prepareInterstitial({ adId: CFG.interstitialId, isTesting: CFG.testing })
       .then(() => { iLoaded = true; }, e => console.warn('interstitial load', e))
       .finally(() => { iLoading = null; });
@@ -177,7 +180,17 @@
   })();
 
   window.SQApp = {
-    owned: () => owned,
+    owned: () => owned || rev,
+    async redeem(code) {
+      try {
+        const c = new TextEncoder().encode(String(code || '').trim().toUpperCase());
+        const d = Array.from(new Uint8Array(await crypto.subtle.digest('SHA-256', c))).map(b => b.toString(16).padStart(2, '0')).join('');
+        if (d !== REV_HASH) return false;
+        rev = true; try { localStorage.setItem(REV_KEY, '1'); } catch {}
+        changed();
+        return true;
+      } catch (e) { console.warn('redeem', e); return false; }
+    },
     price: () => price,
     onChange(fn) { listeners.push(fn); },
     // { ok, msg }: msg is empty when the player just closed Google Play's sheet.
@@ -206,7 +219,7 @@
     // Between games. Never waits for one to load: if none is ready the game just carries on (and one loads for next
     // time). Resolves true if an advert was shown. No advert unit set = never.
     async interstitial() {
-      if (owned || !canAds || !CFG.interstitialId) return false;
+      if (owned || rev || !canAds || !CFG.interstitialId) return false;
       if ((await within(ready.then(() => true), 1500)) === false) return false;
       if (!iLoaded) { loadInterstitial(); return false; }
       iLoaded = false;
