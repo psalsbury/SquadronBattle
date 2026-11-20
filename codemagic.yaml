@@ -16,7 +16,7 @@ workflows:
         distribution_type: app_store
         bundle_identifier: uk.salsbury.squadronbattle
       node: 22
-      xcode: latest
+      xcode: 27.2   # iOS 27 SDK, required by Apple from April 2027 (latest is still Xcode 26 on Codemagic)
     scripts:
       - name: Install the plugins (the iPhone project's Swift packages point into node_modules)
         script: npm ci
