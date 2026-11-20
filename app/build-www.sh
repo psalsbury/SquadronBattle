@@ -31,7 +31,7 @@ else IN='ca-app-pub-3940256099942544/1033173712'; IIN='ca-app-pub-39402560999425
 rm -rf www && mkdir -p www/squadron-battle
 cp "$SITE"/squadron-battle/{index.html,game.js,icon-192.png,icon-512.png} www/squadron-battle/
 cp -r "$SITE"/squadron-battle/lib www/squadron-battle/ # the game's own copies of the shared files and its fonts
-cp src/sq-app.js src/sq-app.css www/squadron-battle/
+cp src/sq-app.js src/sq-app.css src/app-back.js www/squadron-battle/
 cp -r src/splash www/splash && rm -f www/splash/render-sprites.mjs www/splash/sprites.json # the Salsbury games intro
 
 python3 - "$IOS_GOOGLE_CLIENT_ID" "$RW" "$TESTING" "$PRODUCT_ID" "$IRW" "$ITESTING" "$IN" "$IIN" "$IOS_PRODUCT_ID" <<'PY'
@@ -53,7 +53,7 @@ patch('www/squadron-battle/index.html', [
      f'<script>window.SQ_APP_CONFIG = {{ rewardedId: "{rw}", interstitialId: "{inter}", testing: {testing}, productId: "{product}", '
      f'ios: {{ productId: "{iproduct}", rewardedId: "{irw}", interstitialId: "{iin}", testing: {itesting}, googleClientId: "{igid}" }} }};</script>\n'
      '<script>window.SUK_API = "https://salsbury.uk/api/index.php";</script>\n'
-     '<script src="/squadron-battle/sq-app.js"></script>\n<script src="/squadron-battle/lib/auth.js'),
+     '<script src="/squadron-battle/sq-app.js"></script>\n<script src="/squadron-battle/app-back.js"></script>\n<script src="/squadron-battle/lib/auth.js'),
     # the Salsbury games intro (src/splash): covers the page from the first paint, once per app start
     ('</head>\n<body data-screen="menu">\n',
      '<link rel="preload" href="/splash/sora-700-latin.woff2" as="font" type="font/woff2" crossorigin>\n'
